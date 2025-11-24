@@ -2,119 +2,131 @@ smg
 
 player attacker
 	attacker,
-	[a4], [a6], [a7], [a8], [a62], [a72], [a82], [a63], [a73], [a24], [a92], [a102], [a112], [a93], [a103], [a54]
+	[a1], [a3], [a5], [a6], [a7], [a8], [a9], [a10], [a11], [a12], [a13], [a14], [a15], [a16], [a17], [a18], [a19]
 endplayer
 player defender
 	defender,
-	[c3], [c4], [c6], [c7], [c8], [c62], [c72], [c82], [c63], [c73], [c24]
+	[c1], [c2], [c4], [c5], [c6], [c7], [c8], [c9], [c10], [c11], [c12], [c13]
 endplayer
 
 global sched : [1..2];
 
-global A_1 : [0..1];
-label "terminate" = A_1=1;
+global root : [0..1];
+label "terminate" = root=1;
 
-global A_82 : [0..2];
-global A_72 : [0..2];
-global A_8 : [0..2];
-global A_6 : [0..2];
-global A_24 : [0..2];
-global A_73 : [0..2];
-global A_63 : [0..2];
-global A_7 : [0..2];
-global A_4 : [0..2];
-global A_62 : [0..2];
-global A_3 : [1..2];
+global N_10 : [0..2];
+global N_9 : [0..2];
+global N_11 : [0..2];
+global N_12 : [0..2];
+global N_5 : [0..2];
+global N_7 : [0..2];
+global N_2 : [0..2];
+global N_6 : [0..2];
+global N_13 : [0..2];
+global N_8 : [0..2];
+global N_4 : [0..2];
+global N_105 : [1..2];
+global N_1 : [1..2];
+global N_101 : [1..2];
+global N_102 : [1..2];
+global N_103 : [1..2];
+global N_104 : [1..2];
+global N_106 : [1..2];
 
 module attacker
 
-	a72 : bool;
-	a8 : bool;
-	a7 : bool;
-	a24 : bool;
-	a62 : bool;
-	a102 : bool;
-	a112 : bool;
-	a103 : bool;
-	a82 : bool;
-	a73 : bool;
-	a54 : bool;
+	a1 : bool;
+	a3 : bool;
+	a5 : bool;
 	a6 : bool;
-	a4 : bool;
-	a92 : bool;
-	a93 : bool;
-	a63 : bool;
+	a7 : bool;
+	a8 : bool;
+	a9 : bool;
+	a10 : bool;
+	a11 : bool;
+	a12 : bool;
+	a13 : bool;
+	a14 : bool;
+	a15 : bool;
+	a16 : bool;
+	a17 : bool;
+	a18 : bool;
+	a19 : bool;
 
-	[a4] sched=1 & !A_1=1 & A_1=0 & !a4 & (A_4=1) -> (A_1'=1) & (a4'=true) & (sched'=2);
-	[a6] sched=1 & !A_1=1 & A_4=0 & !a6 & (A_6=1) -> (A_4'=1) & (a6'=true) & (sched'=2);
-	[a7] sched=1 & !A_1=1 & A_4=0 & !a7 & (A_7=1) -> (A_4'=1) & (a7'=true) & (sched'=2);
-	[a8] sched=1 & !A_1=1 & A_4=0 & !a8 & (A_8=1) -> (A_4'=1) & (a8'=true) & (sched'=2);
-	[a62] sched=1 & !A_1=1 & A_6=0 & !a62 & (A_62=1) -> (A_6'=1) & (a62'=true) & (sched'=2);
-	[a72] sched=1 & !A_1=1 & A_6=0 & !a72 & (A_72=1) -> (A_6'=1) & (a72'=true) & (sched'=2);
-	[a82] sched=1 & !A_1=1 & A_6=0 & !a82 & (A_82=1) -> (A_6'=1) & (a82'=true) & (sched'=2);
-	[a63] sched=1 & !A_1=1 & A_7=0 & !a63 & (A_63=1) -> (A_7'=1) & (a63'=true) & (sched'=2);
-	[a73] sched=1 & !A_1=1 & A_7=0 & !a73 & (A_73=1) -> (A_7'=1) & (a73'=true) & (sched'=2);
-	[a24] sched=1 & !A_1=1 & A_8=0 & !a24 & (A_24=1) -> (A_8'=1) & (a24'=true) & (sched'=2);
-	[a92] sched=1 & !A_1=1 & A_62=0 & !a92 -> (A_62'=1) & (a92'=true) & (sched'=2);
-	[a102] sched=1 & !A_1=1 & A_72=0 & !a102 -> (A_72'=1) & (a102'=true) & (sched'=2);
-	[a112] sched=1 & !A_1=1 & A_82=0 & !a112 -> (A_82'=1) & (a112'=true) & (sched'=2);
-	[a93] sched=1 & !A_1=1 & A_63=0 & !a93 -> (A_63'=1) & (a93'=true) & (sched'=2);
-	[a103] sched=1 & !A_1=1 & A_73=0 & !a103 -> (A_73'=1) & (a103'=true) & (sched'=2);
-	[a54] sched=1 & !A_1=1 & A_24=0 & !a54 -> (A_24'=1) & (a54'=true) & (sched'=2);
+	[a1] sched=1 & !root=1 & root=0 & !a1 & (N_2=1 & N_1=1) -> (root'=1) & (a1'=true) & (sched'=2);
+	[a3] sched=1 & !root=1 & N_2=0 & !a3 & (N_4=1) -> (N_2'=1) & (a3'=true) & (sched'=2);
+	[a5] sched=1 & !root=1 & N_4=0 & !a5 & (N_5=1) -> (N_4'=1) & (a5'=true) & (sched'=2);
+	[a6] sched=1 & !root=1 & N_4=0 & !a6 & (N_6=1) -> (N_4'=1) & (a6'=true) & (sched'=2);
+	[a7] sched=1 & !root=1 & N_4=0 & !a7 & (N_7=1) -> (N_4'=1) & (a7'=true) & (sched'=2);
+	[a8] sched=1 & !root=1 & N_5=0 & !a8 & (N_8=1) -> (N_5'=1) & (a8'=true) & (sched'=2);
+	[a9] sched=1 & !root=1 & N_5=0 & !a9 & (N_9=1) -> (N_5'=1) & (a9'=true) & (sched'=2);
+	[a10] sched=1 & !root=1 & N_5=0 & !a10 & (N_10=1) -> (N_5'=1) & (a10'=true) & (sched'=2);
+	[a11] sched=1 & !root=1 & N_6=0 & !a11 & (N_11=1) -> (N_6'=1) & (a11'=true) & (sched'=2);
+	[a12] sched=1 & !root=1 & N_6=0 & !a12 & (N_12=1) -> (N_6'=1) & (a12'=true) & (sched'=2);
+	[a13] sched=1 & !root=1 & N_7=0 & !a13 & (N_13=1) -> (N_7'=1) & (a13'=true) & (sched'=2);
+	[a14] sched=1 & !root=1 & N_8=0 & !a14 & (N_101=1) -> (N_8'=1) & (a14'=true) & (sched'=2);
+	[a15] sched=1 & !root=1 & N_9=0 & !a15 & (N_102=1) -> (N_9'=1) & (a15'=true) & (sched'=2);
+	[a16] sched=1 & !root=1 & N_10=0 & !a16 & (N_103=1) -> (N_10'=1) & (a16'=true) & (sched'=2);
+	[a17] sched=1 & !root=1 & N_11=0 & !a17 & (N_104=1) -> (N_11'=1) & (a17'=true) & (sched'=2);
+	[a18] sched=1 & !root=1 & N_12=0 & !a18 & (N_105=1) -> (N_12'=1) & (a18'=true) & (sched'=2);
+	[a19] sched=1 & !root=1 & N_13=0 & !a19 & (N_106=1) -> (N_13'=1) & (a19'=true) & (sched'=2);
 
 endmodule
 
 module defender
 
 
-	[c3] sched=2 & !A_1=1 & !A_3=2 -> (A_3'=2) & (sched'=1);
-	[c4] sched=2 & !A_1=1 & !A_4=2 -> (A_4'=2) & (sched'=1);
-	[c6] sched=2 & !A_1=1 & !A_6=2 -> (A_6'=2) & (sched'=1);
-	[c7] sched=2 & !A_1=1 & !A_7=2 -> (A_7'=2) & (sched'=1);
-	[c8] sched=2 & !A_1=1 & !A_8=2 -> (A_8'=2) & (sched'=1);
-	[c62] sched=2 & !A_1=1 & !A_62=2 -> (A_62'=2) & (sched'=1);
-	[c72] sched=2 & !A_1=1 & !A_72=2 -> (A_72'=2) & (sched'=1);
-	[c82] sched=2 & !A_1=1 & !A_82=2 -> (A_82'=2) & (sched'=1);
-	[c63] sched=2 & !A_1=1 & !A_63=2 -> (A_63'=2) & (sched'=1);
-	[c73] sched=2 & !A_1=1 & !A_73=2 -> (A_73'=2) & (sched'=1);
-	[c24] sched=2 & !A_1=1 & !A_24=2 -> (A_24'=2) & (sched'=1);
+	[c1] sched=2 & !root=1 & !N_1=2 -> (N_1'=2) & (sched'=1);
+	[c2] sched=2 & !root=1 & !N_2=2 -> (N_2'=2) & (sched'=1);
+	[c4] sched=2 & !root=1 & !N_4=2 -> (N_4'=2) & (sched'=1);
+	[c5] sched=2 & !root=1 & !N_5=2 -> (N_5'=2) & (sched'=1);
+	[c6] sched=2 & !root=1 & !N_6=2 -> (N_6'=2) & (sched'=1);
+	[c7] sched=2 & !root=1 & !N_7=2 -> (N_7'=2) & (sched'=1);
+	[c8] sched=2 & !root=1 & !N_8=2 -> (N_8'=2) & (sched'=1);
+	[c9] sched=2 & !root=1 & !N_9=2 -> (N_9'=2) & (sched'=1);
+	[c10] sched=2 & !root=1 & !N_10=2 -> (N_10'=2) & (sched'=1);
+	[c11] sched=2 & !root=1 & !N_11=2 -> (N_11'=2) & (sched'=1);
+	[c12] sched=2 & !root=1 & !N_12=2 -> (N_12'=2) & (sched'=1);
+	[c13] sched=2 & !root=1 & !N_13=2 -> (N_13'=2) & (sched'=1);
 
 endmodule
 
 rewards "attacker"
 
-	[a4] true : 50;
-	[a6] true : 100;
-	[a7] true : 30;
-	[a8] true : 10;
-	[a62] true : 100;
-	[a72] true : 30;
-	[a82] true : 10;
-	[a63] true : 100;
-	[a73] true : 30;
-	[a24] true : 500;
-	[a92] true : 100;
-	[a102] true : 30;
-	[a112] true : 10;
-	[a93] true : 100;
-	[a103] true : 30;
-	[a54] true : 500;
+	[a1] true : 50;
+	[a3] true : 50;
+	[a5] true : 100;
+	[a6] true : 30;
+	[a7] true : 10;
+	[a8] true : 100;
+	[a9] true : 30;
+	[a10] true : 10;
+	[a11] true : 100;
+	[a12] true : 30;
+	[a13] true : 500;
+	[a14] true : 100;
+	[a15] true : 30;
+	[a16] true : 10;
+	[a17] true : 100;
+	[a18] true : 30;
+	[a19] true : 500;
 
 endrewards
 
 rewards "defender"
 
-	[a4] true : 500;
-	[c3] true : 70;
+	[a1] true : 500;
+	[c1] true : 70;
+	[c2] true : 100;
 	[c4] true : 50;
-	[c6] true : 30;
-	[c7] true : 40;
-	[c8] true : 20;
-	[c62] true : 30;
-	[c72] true : 40;
-	[c82] true : 20;
-	[c63] true : 30;
-	[c73] true : 40;
-	[c24] true : 500;
+	[c5] true : 30;
+	[c6] true : 40;
+	[c7] true : 20;
+	[c8] true : 30;
+	[c9] true : 40;
+	[c10] true : 20;
+	[c11] true : 30;
+	[c12] true : 40;
+	[c13] true : 500;
 
 endrewards

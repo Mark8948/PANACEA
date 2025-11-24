@@ -2,67 +2,70 @@ smg
 
 player attacker
 	attacker,
-	[a62], [a72], [a82], [a92], [a102], [a112]
+	[a8], [a9], [a10], [a14], [a15], [a16]
 endplayer
 player defender
 	defender,
-	[c62], [c72], [c82]
+	[c8], [c9], [c10]
 endplayer
 
 global sched : [1..2];
 
-global A_6 : [0..1];
-label "terminate" = A_6=1;
+global root : [0..1];
+label "terminate" = root=1;
 
-global A_62 : [0..2];
-global A_82 : [0..2];
-global A_72 : [0..2];
+global N_10 : [0..2];
+global N_9 : [0..2];
+global N_8 : [0..2];
+global N_101 : [1..2];
+global N_103 : [1..2];
+global N_102 : [1..2];
 
 module attacker
 
-	a92 : bool;
-	a102 : bool;
-	a72 : bool;
-	a112 : bool;
-	a82 : bool;
-	a62 : bool;
+	a8 : bool;
+	a9 : bool;
+	a10 : bool;
+	a14 : bool;
+	a15 : bool;
+	a16 : bool;
 
-	[a62] sched=1 & !A_6=1 & A_6=0 & !a62 & (A_62=1) -> (A_6'=1) & (a62'=true) & (sched'=2);
-	[a72] sched=1 & !A_6=1 & A_6=0 & !a72 & (A_72=1) -> (A_6'=1) & (a72'=true) & (sched'=2);
-	[a82] sched=1 & !A_6=1 & A_6=0 & !a82 & (A_82=1) -> (A_6'=1) & (a82'=true) & (sched'=2);
-	[a92] sched=1 & !A_6=1 & A_62=0 & !a92 -> (A_62'=1) & (a92'=true) & (sched'=2);
-	[a102] sched=1 & !A_6=1 & A_72=0 & !a102 -> (A_72'=1) & (a102'=true) & (sched'=2);
-	[a112] sched=1 & !A_6=1 & A_82=0 & !a112 -> (A_82'=1) & (a112'=true) & (sched'=2);
+	[a8] sched=1 & !root=1 & root=0 & !a8 & (N_8=1) -> (root'=1) & (a8'=true) & (sched'=2);
+	[a9] sched=1 & !root=1 & root=0 & !a9 & (N_9=1) -> (root'=1) & (a9'=true) & (sched'=2);
+	[a10] sched=1 & !root=1 & root=0 & !a10 & (N_10=1) -> (root'=1) & (a10'=true) & (sched'=2);
+	[a14] sched=1 & !root=1 & N_8=0 & !a14 & (N_101=1) -> (N_8'=1) & (a14'=true) & (sched'=2);
+	[a15] sched=1 & !root=1 & N_9=0 & !a15 & (N_102=1) -> (N_9'=1) & (a15'=true) & (sched'=2);
+	[a16] sched=1 & !root=1 & N_10=0 & !a16 & (N_103=1) -> (N_10'=1) & (a16'=true) & (sched'=2);
 
 endmodule
 
 module defender
 
 
-	[c62] sched=2 & !A_6=1 & !A_62=2 -> (A_62'=2) & (sched'=1);
-	[c72] sched=2 & !A_6=1 & !A_72=2 -> (A_72'=2) & (sched'=1);
-	[c82] sched=2 & !A_6=1 & !A_82=2 -> (A_82'=2) & (sched'=1);
+	[c8] sched=2 & !root=1 & !N_8=2 -> (N_8'=2) & (sched'=1);
+	[c9] sched=2 & !root=1 & !N_9=2 -> (N_9'=2) & (sched'=1);
+	[c10] sched=2 & !root=1 & !N_10=2 -> (N_10'=2) & (sched'=1);
 
 endmodule
 
 rewards "attacker"
 
-	[a62] true : 100;
-	[a72] true : 30;
-	[a82] true : 10;
-	[a92] true : 100;
-	[a102] true : 30;
-	[a112] true : 10;
+	[a8] true : 100;
+	[a9] true : 30;
+	[a10] true : 10;
+	[a14] true : 100;
+	[a15] true : 30;
+	[a16] true : 10;
 
 endrewards
 
 rewards "defender"
 
-	[a62] true : 1000;
-	[a82] true : 100;
-	[a72] true : 300;
-	[c62] true : 30;
-	[c72] true : 40;
-	[c82] true : 20;
+	[a8] true : 1000;
+	[a9] true : 300;
+	[a10] true : 100;
+	[c8] true : 30;
+	[c9] true : 40;
+	[c10] true : 20;
 
 endrewards

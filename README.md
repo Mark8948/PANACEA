@@ -61,12 +61,12 @@ wget https://www.prismmodelchecker.org/dl/prism-games-3.2.1-linux64-x86.tar.gz
 ```
 Unzip the file inside this project, specifying the correct path, with the following command:
 ```bash
-tar -xvf prism-games-3.2.1-linux64-x86.tar.gz -C PANACEA
+tar -xvf prism-games-3.2.1-linux64-x86.tar.gz
 ```
 
 Install the software with the following command:
 ```bash
-cd PANACEA/prism-games-3.2.1-linux64-x86
+cd prism-games-3.2.1-linux64-x86
 ./install.sh
 ```
 To run PRISM-games: for Windows, double-click the short-cut; on other OSs, run `bin/xprism` for the GUI or `bin/prism` for the command-line version.
@@ -87,14 +87,18 @@ python main.py --input input.xml --output output.prism --time
 
 Then you can run the PRISM model with the following command:
 ```bash
-cd PANACEA/prism-games-3.2.1-linux64-x86
-/bin/prism output.prism properties.props -prop 1 -exportresults output/results.csv:csv  -exportstrat output/strat.dot
+prism-games-3.2.1-linux64-x86/bin/prism \
+    -javamaxmem 1g \
+    -cuddmaxmem 1g \
+    output.prism \
+    properties.props -prop 1 \
+    -exportresults output/results.csv:csv \
+    -exportstrat output/strat.dot
 ```
+Change `-javamaxmem` and `-cuddmaxmem` values according to your system specifications and the size of the model.
 
 Or you can run PRISM-games with the GUI with the following command:
 ```bash
-cd PANACEA/prism-games-3.2.1-linux64-x86
-/bin/xprism
+prism-games-3.2.1-linux64-x86/bin/xprism
 ```
 And then load the PRISM model and the properties file.
-
