@@ -45,7 +45,7 @@ class PanaceaApp(ctk.CTk):
             "danger": "#E05D5D"
         }
 
-        self.title("PANACEA Framework - Desktop GUI")
+        self.title("PANACEA Desktop GUI")
         self.geometry("1180x720")
         self.minsize(1080, 680)
         self.configure(fg_color=self.palette["bg"])
