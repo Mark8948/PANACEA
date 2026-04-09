@@ -46,7 +46,7 @@ class PanaceaApp(ctk.CTk):
         }
 
         self.title("PANACEA Desktop GUI")
-        self.geometry("1180x720")
+        self.geometry("1180x800")
         self.minsize(1080, 680)
         self.configure(fg_color=self.palette["bg"])
 
@@ -271,12 +271,13 @@ class PanaceaApp(ctk.CTk):
         Set up the sidebar UI components.
 
         Creates and configures the brand card, load button, file status display,
-        options card with time analysis checkbox, and footer label.
+        options cards with time analysis and pruning options, and footer label.
         """
         self.setup_brand_card()
         self.setup_load_button()
         self.setup_file_card()
-        self.setup_options_card()
+        self.setup_time_options_card()
+        self.setup_prune_options_card()
         self.setup_footer()
 
     def setup_brand_card(self):
@@ -386,20 +387,20 @@ class PanaceaApp(ctk.CTk):
         )
         self.file_name_label.pack(anchor="w", padx=16, pady=(0, 16))
 
-    def setup_options_card(self):
-        """Set up the options card with time analysis checkbox."""
-        options_card = ctk.CTkFrame(
+    def setup_time_options_card(self):
+        """Set up the time analysis options card."""
+        time_card = ctk.CTkFrame(
             self.sidebar,
             fg_color=self.palette["card"],
             corner_radius=22,
             border_width=1,
             border_color=self.palette["border"]
         )
-        options_card.pack(fill="x", padx=22, pady=(0, 18))
+        time_card.pack(fill="x", padx=22, pady=(0, 18))
 
         ctk.CTkLabel(
-            options_card,
-            text="Model options",
+            time_card,
+            text="Time Analysis",
             image=self.icons["clock"],
             compound="left",
             font=ctk.CTkFont(size=15, weight="bold"),
@@ -407,8 +408,8 @@ class PanaceaApp(ctk.CTk):
         ).pack(anchor="w", padx=16, pady=(16, 6))
 
         ctk.CTkLabel(
-            options_card,
-            text="Enable the time variant of generation.",
+            time_card,
+            text="Enable the time variant of generation for R-ADT models.",
             wraplength=260,
             justify="left",
             text_color=self.palette["muted"],
@@ -416,7 +417,7 @@ class PanaceaApp(ctk.CTk):
         ).pack(anchor="w", padx=16, pady=(0, 10))
 
         self.time_analysis = ctk.CTkCheckBox(
-            options_card,
+            time_card,
             text="Time Analysis (R-ADT)",
             font=ctk.CTkFont(size=15, weight="bold"),
             text_color=self.palette["text"],
@@ -425,6 +426,52 @@ class PanaceaApp(ctk.CTk):
             hover_color=self.palette["accent_hover"]
         )
         self.time_analysis.pack(anchor="w", padx=16, pady=(0, 16))
+
+    def setup_prune_options_card(self):
+        """Set up the pruning options card."""
+        prune_card = ctk.CTkFrame(
+            self.sidebar,
+            fg_color=self.palette["card"],
+            corner_radius=22,
+            border_width=1,
+            border_color=self.palette["border"]
+        )
+        prune_card.pack(fill="x", padx=22, pady=(0, 18))
+
+        ctk.CTkLabel(
+            prune_card,
+            text="Pruning Options",
+            image=self.icons["remove"],
+            compound="left",
+            font=ctk.CTkFont(size=15, weight="bold"),
+            text_color=self.palette["text"]
+        ).pack(anchor="w", padx=16, pady=(16, 6))
+
+        ctk.CTkLabel(
+            prune_card,
+            text="Optionally prune the tree at a specific node label to focus on a subtree.",
+            wraplength=260,
+            justify="left",
+            text_color=self.palette["muted"],
+            font=ctk.CTkFont(size=13)
+        ).pack(anchor="w", padx=16, pady=(0, 10))
+
+        ctk.CTkLabel(
+            prune_card,
+            text="Prune Label (optional):",
+            font=ctk.CTkFont(size=14),
+            text_color=self.palette["muted"]
+        ).pack(anchor="w", padx=16, pady=(0, 5))
+
+        self.prune_entry = ctk.CTkEntry(
+            prune_card,
+            placeholder_text="Enter node label to prune",
+            font=ctk.CTkFont(size=14),
+            fg_color=self.palette["surface"],
+            border_color=self.palette["border"],
+            text_color=self.palette["text"]
+        )
+        self.prune_entry.pack(fill="x", padx=16, pady=(0, 16))
 
     def setup_footer(self):
         """Set up the footer label."""
@@ -626,6 +673,12 @@ class PanaceaApp(ctk.CTk):
         try:
             self.write_to_console("[1/3] Extracting data from R-ADT tree...")
             tree = tp.parse_file(self.current_xml_path)
+
+            prune_label = self.prune_entry.get()  # Prende il testo dal nuovo campo
+
+            if prune_label:  # Se l'utente ha scritto qualcosa
+                self.write_to_console(f"[INFO] Pruning tree at node: {prune_label}")
+                tree = tree.prune(prune_label)  # Usa la funzione di tree.py
 
             self.write_to_console("[2/3] Translating to Stochastic Game...")
             if use_time:

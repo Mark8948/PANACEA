@@ -7,7 +7,7 @@ The project was tested on Windows 10 and Ubuntu WSL2 with the following software
 - ADTool 2.2.2
 - PRISM-games 3.2.1
 
-## Graphical User Interface
+## Graphical User Interface (CLI version)
 
 A desktop graphical user interface (GUI) has been developed to simplify the process of converting XML files to PRISM models. The GUI allows users to load XML files, select options like time analysis, and generate PRISM models with a user-friendly interface.
 
@@ -18,7 +18,9 @@ pip install -r requirements.txt
 python panacea-gui.py
 ```
 
-### Building
+**Note:** In the GUI version of PANACEA, the `--props` flag (for generating properties) is applied automatically when generating the PRISM model.
+
+### Building (Executable file Linux - Windows compatible)
 
 Automated builds for Windows and Linux are available through GitHub Actions. Pre-built executables are generated for each release, eliminating the need to install Python and dependencies manually. Check the releases page on github for the latest pre-built binaries for your platform.
 
