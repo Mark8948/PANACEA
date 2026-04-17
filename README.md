@@ -15,7 +15,7 @@ Automated builds for Windows and Linux are available through GitHub Actions. Pre
 
 A desktop graphical user interface (GUI) has been developed to simplify the process of converting XML files to PRISM models. The GUI allows users to load XML files, select options like time analysis, and generate PRISM models with a user-friendly interface.
 
-The GUI was created by [Mark8948](https://github.com/Mark8948) and is available in the `panacea-gui.py` file. To run it, ensure all dependencies are installed by executing:
+The GUI was created by [Mark8948](https://github.com/Mark8948) and is available in the `panacea-gui.py` file. To run it for the first time, ensure all dependencies are installed by executing:
 
 if you are on windows:
 ```bash
@@ -31,7 +31,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-and finally run the program:
+and finally you can run the program by only running the following command:
 
 ```bash 
 python panacea-gui.py
