@@ -30,5 +30,5 @@ PALETTE = {
 TREE_VISUALIZER_PALETTE = {
     "bg_dark": "#2b2b2b",
     "attacker": "#ff4d4d",
-    "defender": "#4dff4d"
+    "defender": "#2d8f34"  # Darker green for better readability with white labels
 }

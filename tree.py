@@ -69,9 +69,13 @@ class Tree:
         return string
     
     def to_graph(self):
+        """Convert the tree to a NetworkX directed graph with node attributes."""
         G = nx.DiGraph()
         for node in self.nodes:
-            G.add_node(node.label, color="Red" if node.role == "Attacker" else "Green")
+            # Store both color and role as attributes for proper visualization
+            role = node.role if node.role else "Attacker"
+            color = "Red" if role == "Attacker" else "Green"
+            G.add_node(node.label, color=color, role=role)
         for edge, action in self.edges:
             G.add_edge(edge[0], edge[1], action=action)
         return G
@@ -105,30 +109,52 @@ class Tree:
     def prune(self, label):
         """
         Prunes the tree but keeps the path to the root.
-        If the parents has the refinement "conjunctive" then it keeps the subtree.
+        If a parent has the refinement "conjunctive" then it keeps the entire subtree.
 
         Args:
             label (str): The label of the subtree to keep.
             
         Returns:
-            Tree: a new pruned tree object.
+            Tree: a new pruned tree object containing only the relevant nodes and edges.
         """    
+        # Validate that the label exists in the tree
+        target_node = self.get_node(label)
+        if target_node is None:
+            raise ValueError(f"Node with label '{label}' not found in tree.")
+        
         path = self.get_path_to_node(label)
-        tree = Tree()
-        for parent in path:
-            parent_node = self.get_node(parent)
-            if parent_node.refinement == "conjunctive" or parent == label:
-                subtree = self.get_subtree(parent)
-                tree.nodes += subtree.nodes
-                tree.edges += subtree.edges
+        pruned_tree = Tree()
+        added_nodes = set()  # Track which nodes have been added to avoid duplicates
+        
+        for i, parent_label in enumerate(path):
+            parent_node = self.get_node(parent_label)
+            
+            # If this node is conjunctive OR if this is the target node, include the entire subtree
+            if parent_node.refinement == "conjunctive" or parent_label == label:
+                subtree = self.get_subtree(parent_label)
+                for node in subtree.nodes:
+                    if node.label not in added_nodes:
+                        pruned_tree.add_node(node)
+                        added_nodes.add(node.label)
+                for edge in subtree.edges:
+                    pruned_tree.edges.append(edge)
                 break
             else:
-                tree.add_node(parent_node)
+                # Add the current node to the pruned tree if not already added
+                if parent_label not in added_nodes:
+                    pruned_tree.add_node(parent_node)
+                    added_nodes.add(parent_label)
+                
+                # Add only children that are in the path to the target OR are Defender nodes
                 children = [c for c in self.get_children(parent_node) if c in path or self.get_node(c).role == "Defender"]
-                for child in children:
-                    tree.add_node(self.get_node(child))
-                    tree.add_edge(parent_node, self.get_node(child))
-        return tree
+                for child_label in children:
+                    if child_label not in added_nodes:
+                        child_node = self.get_node(child_label)
+                        pruned_tree.add_node(child_node)
+                        added_nodes.add(child_label)
+                        pruned_tree.add_edge(parent_node, child_node)
+        
+        return pruned_tree
                 
             
             
