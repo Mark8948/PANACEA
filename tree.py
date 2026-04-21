@@ -13,15 +13,15 @@ class Node:
         
         for line in comment.split('\n'):
             if line.startswith('Type:'):
-                type = line.split(': ')[1]
+                type = line.split(': ')[1].strip()
             elif line.startswith('Action:'):
-                action = line.split(': ')[1]
+                action = line.split(': ')[1].strip()
             elif line.startswith('Cost:'):
-                cost = line.split(': ')[1]
+                cost = line.split(': ')[1].strip()
             elif line.startswith('Time:'):
-                time = line.split(': ')[1]
+                time = line.split(': ')[1].strip()
             elif line.startswith('Role:'):
-                role = line.split(': ')[1]
+                role = line.split(': ')[1].strip()
                 
         return type, action, cost, time, role
     
@@ -73,7 +73,7 @@ class Tree:
         G = nx.DiGraph()
         for node in self.nodes:
             # Store both color and role as attributes for proper visualization
-            role = node.role if node.role else "Attacker"
+            role = node.role.strip() if node.role else "Attacker"
             color = "Red" if role == "Attacker" else "Green"
             G.add_node(node.label, color=color, role=role)
         for edge, action in self.edges:

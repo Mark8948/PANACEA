@@ -105,51 +105,54 @@ class TreeVisualizer:
         # Get hierarchical positions
         pos = self.get_hierarchical_pos(G, root)
 
-        # Prepare node colors, roles, labels, and sizes
-        node_colors = {}
-        node_roles = {}
+        # Prepare labels and sizes
         labels = {}
         node_sizes = {}
         for node in tree_obj.nodes:
-            # Ensure role has a valid value
-            role = node.role if node.role and node.role.strip() else "Attacker"
-            node_roles[node.label] = role
-            color = TREE_VISUALIZER_PALETTE["attacker"] if role == "Attacker" else TREE_VISUALIZER_PALETTE["defender"]
-            node_colors[node.label] = color
             wrapped_label = textwrap.fill(str(node.label), width=15)
             labels[node.label] = wrapped_label
-            size = max(1000, len(wrapped_label) * 50)
-            node_sizes[node.label] = size
+            node_sizes[node.label] = max(1000, len(wrapped_label) * 50)
 
         # Filter to only positioned nodes
         positioned_nodes = list(pos.keys())
-        pos_colors = [node_colors[node] for node in positioned_nodes]
-        pos_sizes = [node_sizes[node] for node in positioned_nodes]
-        pos_labels = {node: labels[node] for node in positioned_nodes}
 
         # Create subgraph for positioned nodes
         G_pos = G.subgraph(positioned_nodes)
 
-        # Draw nodes
-        nx.draw_networkx_nodes(G_pos, pos, ax=ax, node_color=pos_colors, node_size=pos_sizes)
+        # 1. CREIAMO UN DIZIONARIO DI MAPPATURA (Single Source of Truth)
+        role_map = {}
+        for node in tree_obj.nodes:
+            # Estraiamo il ruolo e rimuoviamo spazi/ritorni a capo invisibili
+            role_map[node.label] = node.role.strip() if node.role else 'Attacker'
 
-        # Separate edges into solid and dashed (only for positioned edges)
+        # 2. ASSEGNAMO I COLORI RISPETTANDO L'ORDINE DI NETWORKX
+        node_colors = []
+        for node_label in G_pos.nodes():
+            role = role_map.get(node_label, 'Attacker')
+            if role == 'Defender':
+                node_colors.append(TREE_VISUALIZER_PALETTE["defender"])
+            elif role == 'Attacker':
+                node_colors.append(TREE_VISUALIZER_PALETTE["attacker"])
+            else:
+                node_colors.append("#808080")
+
+        # 3. DIVIDIAMO GLI ARCHI PER IL TRATTEGGIO DELLA DIFESA
         solid_edges = []
         dashed_edges = []
-        for edge in G_pos.edges:
-            target_role = node_roles.get(edge[1], 'Attacker')
+        for u, v in G_pos.edges():
+            target_role = role_map.get(v, 'Attacker')
             if target_role == 'Defender':
-                dashed_edges.append(edge)
+                dashed_edges.append((u, v))
             else:
-                solid_edges.append(edge)
+                solid_edges.append((u, v))
 
-        # Draw solid edges
+        # 4. DISEGNAMO IL GRAFO
+        nx.draw_networkx_nodes(G_pos, pos, ax=ax, node_color=node_colors, node_size=1500)
         nx.draw_networkx_edges(G_pos, pos, ax=ax, edgelist=solid_edges, edge_color='gray', arrows=True)
-
-        # Draw dashed edges
         nx.draw_networkx_edges(G_pos, pos, ax=ax, edgelist=dashed_edges, edge_color='gray', arrows=True, style='dashed')
 
         # Draw labels
+        pos_labels = {node: labels[node] for node in positioned_nodes}
         nx.draw_networkx_labels(G_pos, pos, ax=ax, labels=pos_labels, font_size=8, font_color='white')
 
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.master_frame)
