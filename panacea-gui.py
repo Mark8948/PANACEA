@@ -4,7 +4,9 @@ import os
 import time
 from PIL import Image, ImageDraw
 from typing import Optional
+import matplotlib.pyplot as plt
 from gui.visualizer import TreeVisualizer
+from gui.palette import PALETTE
 
 import tree_to_prism as tp
 
@@ -30,22 +32,7 @@ class PanaceaApp(ctk.CTk):
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
 
-        self.palette = {
-            "bg": "#0E1621",
-            "panel": "#142131",
-            "card": "#1A2A3D",
-            "card_2": "#21344A",
-            "surface": "#28425E",
-            "accent": "#2F80ED",
-            "accent_hover": "#4B95F8",
-            "success": "#228B22",
-            "warning": "#F5A524",
-            "text": "#F6F8FB",
-            "muted": "#AAB6C5",
-            "border": "#31465E",
-            "log_bg": "#0A121C",
-            "danger": "#E05D5D"
-        }
+        self.palette = PALETTE
 
         self.title("PANACEA Desktop GUI")
         self.geometry("1500x800")
@@ -265,7 +252,10 @@ class PanaceaApp(ctk.CTk):
         Handle the window close event.
 
         Properly terminates the application when the user closes the window.
+        Cleans up Matplotlib resources and callbacks before destroying the window.
         """
+        self.visualizer.cleanup()
+        plt.close('all')
         self.quit()
         self.destroy()
 
@@ -751,6 +741,8 @@ class PanaceaApp(ctk.CTk):
             if prune_label:
                 self.write_to_console(f"[INFO] Pruning tree at node: {prune_label}")
                 tree = tree.prune(prune_label)
+                self.write_to_console("[VISUALIZATION] Updating Tree View with pruned tree...")
+                self.visualizer.draw_tree(tree)
 
             self.write_to_console("[2/3] Translating to Stochastic Game...")
             if use_time:
