@@ -4,6 +4,7 @@ import os
 import time
 from PIL import Image, ImageDraw
 from typing import Optional
+from gui.visualizer import TreeVisualizer
 
 import tree_to_prism as tp
 
@@ -21,7 +22,8 @@ class PanaceaApp(ctk.CTk):
         Initialize the PANACEA GUI application.
 
         Sets up the main window, color palette, icons, and UI components including
-        sidebar and main content areas. Configures the initial state and console output.
+        sidebar, tabbed content areas (Home, Tree View, Statistics), and visualization.
+        Initializes the tree visualizer and configures the initial state and console output.
         """
         super().__init__()
 
@@ -72,10 +74,10 @@ class PanaceaApp(ctk.CTk):
         )
         self.main_content.grid(row=0, column=1, padx=24, pady=24, sticky="nsew")
         self.main_content.grid_columnconfigure(0, weight=1)
-        self.main_content.grid_rowconfigure(2, weight=1)
+        self.main_content.grid_rowconfigure(0, weight=1)
 
         self.setup_sidebar()
-        self.setup_main_area()
+        self.setup_tabs()
         self.write_to_console("Interface ready. Import an XML file to start.")
 
         # Handle window close event
@@ -280,6 +282,28 @@ class PanaceaApp(ctk.CTk):
         self.setup_prune_options_card()
         self.setup_footer()
 
+    def setup_tabs(self):
+        """
+        Set up the tabbed content area with three main sections.
+
+        Creates a CTkTabview with three tabs: Home (main flow), Tree View (visualization),
+        and Statistics. Initializes the tree visualizer for the Tree View tab and
+        configures each tab for proper layout and functionality.
+        """
+        self.tabview = ctk.CTkTabview(self.main_content)
+        self.tabview.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
+
+        self.tab_home = self.tabview.add("Home")
+        self.tab_tree = self.tabview.add("Tree View")
+        self.tab_stats = self.tabview.add("Statistics")
+
+        self.tab_home.grid_columnconfigure(0, weight=1)
+        self.tab_home.grid_rowconfigure(2, weight=1)
+
+        self.setup_home_tab()
+        self.setup_tree_view_tab()
+        self.setup_stats_tab()
+
     def setup_brand_card(self):
         """Set up the brand card with PANACEA title and description."""
         brand_card = ctk.CTkFrame(
@@ -483,15 +507,16 @@ class PanaceaApp(ctk.CTk):
         )
         footer.pack(side="bottom", pady=20)
 
-    def setup_main_area(self):
+    def setup_home_tab(self):
         """
-        Set up the main content area UI components.
+        Set up the Home tab content area.
 
         Creates the header, hero section with generation button, and console area
-        with output textbox and clear button.
+        with output textbox and clear button. This is the main workflow tab for
+        converting XML files to PRISM models.
         """
         header = ctk.CTkFrame(
-            self.main_content,
+            self.tab_home,
             fg_color="transparent"
         )
         header.grid(row=0, column=0, sticky="ew", pady=(0, 18))
@@ -512,7 +537,7 @@ class PanaceaApp(ctk.CTk):
         ).grid(row=1, column=0, sticky="w", pady=(4, 0))
 
         hero = ctk.CTkFrame(
-            self.main_content,
+            self.tab_home,
             fg_color=self.palette["card"],
             corner_radius=26,
             border_width=1,
@@ -570,7 +595,7 @@ class PanaceaApp(ctk.CTk):
         self.btn_convert.configure(text_color=self.palette["text"])
 
         console_card = ctk.CTkFrame(
-            self.main_content,
+            self.tab_home,
             fg_color=self.palette["card_2"],
             corner_radius=26,
             border_width=1,
@@ -624,6 +649,33 @@ class PanaceaApp(ctk.CTk):
         self.textbox.grid(row=1, column=0, sticky="nsew", padx=18, pady=(0, 18))
         self.textbox.configure(state="disabled")
 
+    def setup_tree_view_tab(self):
+        """
+        Set up the Tree View tab content area.
+
+        Initializes the TreeVisualizer component to display the hierarchical structure
+        of the loaded attack-defense tree with node coloring based on player roles.
+        """
+        self.visualizer = TreeVisualizer(self.tab_tree)
+
+    def setup_stats_tab(self):
+        """
+        Set up the Statistics tab content area.
+
+        Reserved for future statistical analysis and metrics visualization of the model.
+        Currently provides a placeholder for extending the application.
+        """
+        self.tab_stats.grid_columnconfigure(0, weight=1)
+        self.tab_stats.grid_rowconfigure(0, weight=1)
+        
+        placeholder = ctk.CTkLabel(
+            self.tab_stats,
+            text="Statistics and metrics coming soon...",
+            font=ctk.CTkFont(size=16),
+            text_color=self.palette["muted"]
+        )
+        placeholder.grid(row=0, column=0, padx=20, pady=20)
+
     def load_xml(self):
         """
         Open a file dialog to select and load an XML file.
@@ -640,8 +692,6 @@ class PanaceaApp(ctk.CTk):
             self.write_to_console(f"[INFO] XML loaded successfully: {file_name}")
 
             self.update_file_ui(True, file_name)
-
-    def run_panacea(self):
         """
         Execute the PANACEA conversion process.
 
