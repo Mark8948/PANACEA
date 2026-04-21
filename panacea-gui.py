@@ -4,7 +4,9 @@ import os
 import time
 from PIL import Image, ImageDraw
 from typing import Optional
+import matplotlib.pyplot as plt
 from gui.visualizer import TreeVisualizer
+from gui.palette import PALETTE
 
 import tree_to_prism as tp
 
@@ -30,22 +32,7 @@ class PanaceaApp(ctk.CTk):
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
 
-        self.palette = {
-            "bg": "#0E1621",
-            "panel": "#142131",
-            "card": "#1A2A3D",
-            "card_2": "#21344A",
-            "surface": "#28425E",
-            "accent": "#2F80ED",
-            "accent_hover": "#4B95F8",
-            "success": "#228B22",
-            "warning": "#F5A524",
-            "text": "#F6F8FB",
-            "muted": "#AAB6C5",
-            "border": "#31465E",
-            "log_bg": "#0A121C",
-            "danger": "#E05D5D"
-        }
+        self.palette = PALETTE
 
         self.title("PANACEA Desktop GUI")
         self.geometry("1500x800")
@@ -229,8 +216,8 @@ class PanaceaApp(ctk.CTk):
         if is_loaded and file_name:
             self.file_status_badge.configure(
                 text="XML ready",
-                fg_color="#1E3B32",
-                text_color="#A8F0D2"
+                fg_color=self.palette["status_ready_bg"],
+                text_color=self.palette["status_ready_text"]
             )
             self.file_name_label.configure(
                 text=file_name,
@@ -246,8 +233,8 @@ class PanaceaApp(ctk.CTk):
         else:
             self.file_status_badge.configure(
                 text="No XML",
-                fg_color="#3A2A2A",
-                text_color="#FFB4B4"
+                fg_color=self.palette["status_error_bg"],
+                text_color=self.palette["status_error_text"]
             )
             self.file_name_label.configure(
                 text="Select an XML file from the left column.",
@@ -265,7 +252,10 @@ class PanaceaApp(ctk.CTk):
         Handle the window close event.
 
         Properly terminates the application when the user closes the window.
+        Cleans up Matplotlib resources and callbacks before destroying the window.
         """
+        self.visualizer.cleanup()
+        plt.close('all')
         self.quit()
         self.destroy()
 
@@ -393,8 +383,8 @@ class PanaceaApp(ctk.CTk):
         self.file_status_badge = ctk.CTkLabel(
             file_card,
             text="No XML",
-            fg_color="#3A2A2A",
-            text_color="#FFB4B4",
+            fg_color=self.palette["status_error_bg"],
+            text_color=self.palette["status_error_text"],
             corner_radius=999,
             padx=10,
             pady=6,
@@ -628,7 +618,7 @@ class PanaceaApp(ctk.CTk):
             height=42,
             corner_radius=14,
             fg_color="transparent",
-            hover_color="#2A3A4E",
+            hover_color=self.palette["button_hover_secondary"],
             border_width=1,
             border_color=self.palette["border"],
             text_color=self.palette["text"],
@@ -751,6 +741,8 @@ class PanaceaApp(ctk.CTk):
             if prune_label:
                 self.write_to_console(f"[INFO] Pruning tree at node: {prune_label}")
                 tree = tree.prune(prune_label)
+                self.write_to_console("[VISUALIZATION] Updating Tree View with pruned tree...")
+                self.visualizer.draw_tree(tree)
 
             self.write_to_console("[2/3] Translating to Stochastic Game...")
             if use_time:
