@@ -48,11 +48,12 @@ class PanaceaApp(ctk.CTk):
         }
 
         self.title("PANACEA Desktop GUI")
-        self.geometry("1180x800")
+        self.geometry("1500x800")
         self.minsize(1080, 680)
         self.configure(fg_color=self.palette["bg"])
 
         self.current_xml_path: Optional[str] = None
+        self.current_tree = None
         self.icons = self.build_icons()
 
         self.grid_columnconfigure(0, weight=0)
@@ -670,7 +671,7 @@ class PanaceaApp(ctk.CTk):
         
         placeholder = ctk.CTkLabel(
             self.tab_stats,
-            text="Statistics and metrics coming soon...",
+            text="Statistics and metrics are currently under development.\nComing soon ...",
             font=ctk.CTkFont(size=16),
             text_color=self.palette["muted"]
         )
@@ -680,18 +681,35 @@ class PanaceaApp(ctk.CTk):
         """
         Open a file dialog to select and load an XML file.
 
-        Updates the UI to reflect the loaded file status, enables the convert button,
+        Parses the XML file, displays the tree visualization in the Tree View tab,
+        updates the UI to reflect the loaded file status, enables the convert button,
         and logs the action to the console.
         """
         file_path = filedialog.askopenfilename(filetypes=[("XML files", "*.xml")])
 
         if file_path:
-            self.current_xml_path = file_path
-            file_name = os.path.basename(file_path)
+            try:
+                self.current_xml_path = file_path
+                file_name = os.path.basename(file_path)
 
-            self.write_to_console(f"[INFO] XML loaded successfully: {file_name}")
+                self.write_to_console(f"[INFO] XML loaded successfully: {file_name}")
 
-            self.update_file_ui(True, file_name)
+                self.write_to_console("[PARSING] Building tree structure...")
+                self.current_tree = tp.parse_file(file_path)
+
+                self.write_to_console("[VISUALIZATION] Rendering tree in Tree View tab...")
+                self.visualizer.draw_tree(self.current_tree)
+
+                self.update_file_ui(True, file_name)
+                self.write_to_console("[SUCCESS] Tree visualization complete.")
+
+            except Exception as e:
+                self.write_to_console(f"[ERROR] Failed to load XML: {str(e)}")
+                self.current_xml_path = None
+                self.current_tree = None
+                self.update_file_ui(False)
+
+    def run_panacea(self):
         """
         Execute the PANACEA conversion process.
 
@@ -722,13 +740,17 @@ class PanaceaApp(ctk.CTk):
 
         try:
             self.write_to_console("[1/3] Extracting data from R-ADT tree...")
-            tree = tp.parse_file(self.current_xml_path)
+            if self.current_tree:
+                tree = self.current_tree
+                self.write_to_console("[INFO] Using cached tree from file load.")
+            else:
+                tree = tp.parse_file(self.current_xml_path)
 
-            prune_label = self.prune_entry.get()  # Prende il testo dal nuovo campo
+            prune_label = self.prune_entry.get()
 
-            if prune_label:  # Se l'utente ha scritto qualcosa
+            if prune_label:
                 self.write_to_console(f"[INFO] Pruning tree at node: {prune_label}")
-                tree = tree.prune(prune_label)  # Usa la funzione di tree.py
+                tree = tree.prune(prune_label)
 
             self.write_to_console("[2/3] Translating to Stochastic Game...")
             if use_time:
