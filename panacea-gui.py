@@ -255,14 +255,14 @@ class PanaceaApp(ctk.CTk):
 
         self.tab_home = self.tabview.add("Home")
         self.tab_tree = self.tabview.add("Tree View")
-        self.tab_stats = self.tabview.add("Statistics")
+        # self.tab_stats = self.tabview.add("Statistics") Coming soon
 
         self.tab_home.grid_columnconfigure(0, weight=1)
         self.tab_home.grid_rowconfigure(2, weight=1)
 
         self.setup_home_tab()
         self.setup_tree_view_tab()
-        self.setup_stats_tab()
+        # self.setup_stats_tab() # Coming soon
 
     def setup_brand_card(self):
         """Set up the brand card with PANACEA title and description."""
@@ -581,18 +581,22 @@ class PanaceaApp(ctk.CTk):
             on_reset=self._on_context_reset
         )
 
-    def setup_stats_tab(self):
-        """Set up the Statistics tab content area."""
-        self.tab_stats.grid_columnconfigure(0, weight=1)
-        self.tab_stats.grid_rowconfigure(0, weight=1)
 
-        placeholder = ctk.CTkLabel(
-            self.tab_stats,
-            text="Statistics and metrics are currently under development.\nComing soon ...",
-            font=ctk.CTkFont(size=16),
-            text_color=self.palette["muted"]
-        )
-        placeholder.grid(row=0, column=0, padx=20, pady=20)
+    # STATISTICS TAB COMING SOON - DEFINED FUNCION BUT NOT IMPLEMENTED YET
+
+
+    # def setup_stats_tab(self):
+    #     """Set up the Statistics tab content area."""
+    #     self.tab_stats.grid_columnconfigure(0, weight=1)
+    #     self.tab_stats.grid_rowconfigure(0, weight=1)
+
+    #     placeholder = ctk.CTkLabel(
+    #         self.tab_stats,
+    #         text="Statistics and metrics are currently under development.\nComing soon ...",
+    #         font=ctk.CTkFont(size=16),
+    #         text_color=self.palette["muted"]
+    #     )
+    #     placeholder.grid(row=0, column=0, padx=20, pady=20)
 
     def _on_context_prune(self, node_label: str):
         """
