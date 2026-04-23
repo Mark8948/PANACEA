@@ -41,7 +41,7 @@ class PanaceaApp(ctk.CTk):
 
         self.current_xml_path: Optional[str] = None
         self.current_tree = None
-        self.displayed_tree = None  # Tracks the currently displayed tree (original or pruned)
+        self.displayed_tree = None
         self.icons = self.build_icons()
 
         self.grid_columnconfigure(0, weight=0)
@@ -69,18 +69,11 @@ class PanaceaApp(ctk.CTk):
         self.setup_tabs()
         self.write_to_console("Interface ready. Import an XML file to start.")
 
-        # Handle window close event
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
     def build_icons(self):
         """
         Build and return a dictionary of custom icons used in the GUI.
-
-        Creates CTkImage objects for various UI elements like upload, generate, file, etc.
-        Each icon is generated programmatically using PIL.
-
-        Returns:
-            dict: A dictionary mapping icon names (str) to CTkImage objects.
         """
         return {
             "upload": self.make_icon("upload", 28),
@@ -95,16 +88,6 @@ class PanaceaApp(ctk.CTk):
     def make_icon(self, kind, size=24):
         """
         Generate a custom icon image based on the specified kind and size.
-
-        Uses PIL to draw vector-style icons programmatically. Supports various icon types
-        like upload, generate, file, log, clear, and clock.
-
-        Args:
-            kind (str): The type of icon to generate (e.g., "upload", "generate").
-            size (int, optional): The size of the icon in pixels. Defaults to 24.
-
-        Returns:
-            CTkImage: A CustomTkinter image object ready for use in widgets.
         """
         img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
@@ -161,12 +144,6 @@ class PanaceaApp(ctk.CTk):
     def write_to_console(self, text):
         """
         Write a timestamped message to the console textbox.
-
-        Formats the input text with a timestamp and special handling for separator lines
-        (starting with "---"). Updates the UI to show the new text and scroll to the end.
-
-        Args:
-            text (str): The message to write to the console.
         """
         timestamp = time.strftime("%H:%M:%S")
         clean_text = text.rstrip("\n")
@@ -186,8 +163,6 @@ class PanaceaApp(ctk.CTk):
     def clear_console(self):
         """
         Clear all text from the console textbox and log the action.
-
-        Resets the console to an empty state and writes a confirmation message.
         """
         self.textbox.configure(state="normal")
         self.textbox.delete("0.0", "end")
@@ -205,21 +180,15 @@ class PanaceaApp(ctk.CTk):
         self.current_tree = None
         self.displayed_tree = None
 
-        self.visualizer.cleanup()  # Clear the visualization
-        self.tree_placeholder.grid()  # Show placeholder
-        self.prune_entry.delete(0, "end")  # Clear prune entry field
+        self.visualizer.cleanup()
+        self.tree_placeholder.grid()
 
         self.update_file_ui(False)
-
         self.write_to_console("[INFO] XML file removed by the user.")
 
     def update_file_ui(self, is_loaded: bool, file_name: str = None):
         """
         Update the file-related UI elements based on whether a file is loaded.
-
-        Args:
-            is_loaded (bool): True if a file is loaded, False otherwise.
-            file_name (str, optional): The name of the loaded file, required if is_loaded is True.
         """
         if is_loaded and file_name:
             self.file_status_badge.configure(
@@ -238,8 +207,6 @@ class PanaceaApp(ctk.CTk):
             self.btn_convert.configure(state="normal", fg_color=self.palette["success"])
             self.btn_clear_file.configure(state="normal")
             self.btn_clear_file.grid()
-            self.btn_prune.configure(state="normal")
-            self.btn_prune_reset.configure(state="normal")
         else:
             self.file_status_badge.configure(
                 text="No XML",
@@ -256,15 +223,10 @@ class PanaceaApp(ctk.CTk):
             )
             self.btn_convert.configure(state="disabled", fg_color=self.palette["danger"])
             self.btn_clear_file.grid_remove()
-            self.btn_prune.configure(state="disabled")
-            self.btn_prune_reset.configure(state="disabled")
 
     def on_closing(self):
         """
         Handle the window close event.
-
-        Properly terminates the application when the user closes the window.
-        Cleans up Matplotlib resources and callbacks before destroying the window.
         """
         self.visualizer.cleanup()
         plt.close('all')
@@ -276,22 +238,17 @@ class PanaceaApp(ctk.CTk):
         Set up the sidebar UI components.
 
         Creates and configures the brand card, load button, file status display,
-        options cards with time analysis and pruning options, and footer label.
+        time analysis options card, and footer label.
         """
         self.setup_brand_card()
         self.setup_load_button()
         self.setup_file_card()
         self.setup_time_options_card()
-        self.setup_prune_options_card()
         self.setup_footer()
 
     def setup_tabs(self):
         """
         Set up the tabbed content area with three main sections.
-
-        Creates a CTkTabview with three tabs: Home (main flow), Tree View (visualization),
-        and Statistics. Initializes the tree visualizer for the Tree View tab and
-        configures each tab for proper layout and functionality.
         """
         self.tabview = ctk.CTkTabview(self.main_content)
         self.tabview.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
@@ -454,82 +411,6 @@ class PanaceaApp(ctk.CTk):
         )
         self.time_analysis.pack(anchor="w", padx=16, pady=(0, 16))
 
-    def setup_prune_options_card(self):
-        """Set up the pruning options card."""
-        prune_card = ctk.CTkFrame(
-            self.sidebar,
-            fg_color=self.palette["card"],
-            corner_radius=22,
-            border_width=1,
-            border_color=self.palette["border"]
-        )
-        prune_card.pack(fill="x", padx=22, pady=(0, 18))
-
-        ctk.CTkLabel(
-            prune_card,
-            text="Pruning Options",
-            image=self.icons["remove"],
-            compound="left",
-            font=ctk.CTkFont(size=15, weight="bold"),
-            text_color=self.palette["text"]
-        ).pack(anchor="w", padx=16, pady=(16, 6))
-
-        ctk.CTkLabel(
-            prune_card,
-            text="Optionally prune the tree at a specific node label to focus on a subtree.",
-            wraplength=260,
-            justify="left",
-            text_color=self.palette["muted"],
-            font=ctk.CTkFont(size=13)
-        ).pack(anchor="w", padx=16, pady=(0, 10))
-
-        ctk.CTkLabel(
-            prune_card,
-            text="Prune Label (optional):",
-            font=ctk.CTkFont(size=14),
-            text_color=self.palette["muted"]
-        ).pack(anchor="w", padx=16, pady=(0, 5))
-
-        self.prune_entry = ctk.CTkEntry(
-            prune_card,
-            placeholder_text="Enter node label to prune",
-            font=ctk.CTkFont(size=14),
-            fg_color=self.palette["surface"],
-            border_color=self.palette["border"],
-            text_color=self.palette["text"]
-        )
-        self.prune_entry.pack(fill="x", padx=16, pady=(0, 12))
-
-        self.btn_prune = ctk.CTkButton(
-            prune_card,
-            text="Preview Pruned Tree",
-            image=self.icons["remove"],
-            compound="left",
-            font=ctk.CTkFont(size=13, weight="bold"),
-            fg_color=self.palette["accent"],
-            hover_color=self.palette["accent_hover"],
-            text_color="white",
-            corner_radius=10,
-            command=self.preview_pruned_tree,
-            state="disabled"
-        )
-        self.btn_prune.pack(fill="x", padx=16, pady=(0, 8))
-
-        self.btn_prune_reset = ctk.CTkButton(
-            prune_card,
-            text="Reset to Original Tree",
-            image=self.icons["clear"],
-            compound="left",
-            font=ctk.CTkFont(size=13, weight="bold"),
-            fg_color=self.palette["surface"],
-            hover_color=self.palette["button_hover_secondary"],
-            text_color="white",
-            corner_radius=10,
-            command=self.reset_tree_to_original,
-            state="disabled"
-        )
-        self.btn_prune_reset.pack(fill="x", padx=16, pady=(0, 16))
-
     def setup_footer(self):
         """Set up the footer label."""
         footer = ctk.CTkLabel(
@@ -543,15 +424,8 @@ class PanaceaApp(ctk.CTk):
     def setup_home_tab(self):
         """
         Set up the Home tab content area.
-
-        Creates the header, hero section with generation button, and console area
-        with output textbox and clear button. This is the main workflow tab for
-        converting XML files to PRISM models.
         """
-        header = ctk.CTkFrame(
-            self.tab_home,
-            fg_color="transparent"
-        )
+        header = ctk.CTkFrame(self.tab_home, fg_color="transparent")
         header.grid(row=0, column=0, sticky="ew", pady=(0, 18))
         header.grid_columnconfigure(0, weight=1)
 
@@ -686,33 +560,32 @@ class PanaceaApp(ctk.CTk):
         """
         Set up the Tree View tab content area.
 
-        Initializes the TreeVisualizer component to display the hierarchical structure
-        of the loaded attack-defense tree with node coloring based on player roles.
-        Also sets up a placeholder label for when no XML is loaded.
+        Initializes the TreeVisualizer with right-click context menu callbacks
+        for pruning (on_prune) and resetting (on_reset) the tree directly
+        from the graphical view.
         """
         self.tab_tree.grid_columnconfigure(0, weight=1)
         self.tab_tree.grid_rowconfigure(0, weight=1)
 
         self.tree_placeholder = ctk.CTkLabel(
             self.tab_tree,
-            text="Please load a valid XML file to visualize the attack-defense tree.",
+            text="Please load a valid XML file to visualize the attack-defense tree.\n\nTip: right-click on a node to prune the tree or reset it.",
             font=ctk.CTkFont(size=16),
             text_color=self.palette["muted"]
         )
         self.tree_placeholder.grid(row=0, column=0, padx=20, pady=20)
 
-        self.visualizer = TreeVisualizer(self.tab_tree)
+        self.visualizer = TreeVisualizer(
+            self.tab_tree,
+            on_prune=self._on_context_prune,
+            on_reset=self._on_context_reset
+        )
 
     def setup_stats_tab(self):
-        """
-        Set up the Statistics tab content area.
-
-        Reserved for future statistical analysis and metrics visualization of the model.
-        Currently provides a placeholder for extending the application.
-        """
+        """Set up the Statistics tab content area."""
         self.tab_stats.grid_columnconfigure(0, weight=1)
         self.tab_stats.grid_rowconfigure(0, weight=1)
-        
+
         placeholder = ctk.CTkLabel(
             self.tab_stats,
             text="Statistics and metrics are currently under development.\nComing soon ...",
@@ -721,13 +594,47 @@ class PanaceaApp(ctk.CTk):
         )
         placeholder.grid(row=0, column=0, padx=20, pady=20)
 
+    def _on_context_prune(self, node_label: str):
+        """
+        Callback invoked when the user selects 'Pota da qui' from the context menu.
+
+        Applies pruning starting from the given node label on the currently displayed
+        tree (or the original if no pruning has been applied yet), updates the visualization,
+        and logs the operation to the console.
+
+        Args:
+            node_label (str): The label of the node to prune from.
+        """
+        if not self.current_tree:
+            self.write_to_console("[WARNING] No tree loaded.")
+            return
+        try:
+            tree_to_prune = self.displayed_tree if self.displayed_tree else self.current_tree
+            self.write_to_console(f"[PRUNING] Applying pruning at node: {node_label}")
+            pruned_tree = tree_to_prune.prune(node_label)
+            self.displayed_tree = pruned_tree
+            self.visualizer.draw_tree(pruned_tree)
+            self.write_to_console("[SUCCESS] Pruned tree displayed. Right-click again to prune further.")
+        except Exception as e:
+            self.write_to_console(f"[ERROR] Pruning failed: {str(e)}")
+
+    def _on_context_reset(self):
+        """
+        Callback invoked when the user selects 'Reimposta albero' from the context menu.
+
+        Resets the visualization to the original unpruned tree and logs the operation.
+        """
+        if not self.current_tree:
+            self.write_to_console("[WARNING] No tree loaded.")
+            return
+        self.displayed_tree = None
+        self.write_to_console("[RESET] Displaying original tree...")
+        self.visualizer.draw_tree(self.current_tree)
+        self.write_to_console("[SUCCESS] Tree reset to original.")
+
     def load_xml(self):
         """
         Open a file dialog to select and load an XML file.
-
-        Parses the XML file, displays the tree visualization in the Tree View tab,
-        updates the UI to reflect the loaded file status, enables the convert button,
-        and logs the action to the console.
         """
         file_path = filedialog.askopenfilename(filetypes=[("XML files", "*.xml")])
 
@@ -737,15 +644,13 @@ class PanaceaApp(ctk.CTk):
                 file_name = os.path.basename(file_path)
 
                 self.write_to_console(f"[INFO] XML loaded successfully: {file_name}")
-
                 self.write_to_console("[PARSING] Building tree structure...")
                 self.current_tree = tp.parse_file(file_path)
-                self.displayed_tree = None  # Reset to original tree
-                self.prune_entry.delete(0, "end")  # Clear prune entry field
+                self.displayed_tree = None
 
                 self.write_to_console("[VISUALIZATION] Rendering tree in Tree View tab...")
                 self.visualizer.draw_tree(self.current_tree)
-                self.tree_placeholder.grid_remove()  # Hide placeholder
+                self.tree_placeholder.grid_remove()
 
                 self.update_file_ui(True, file_name)
                 self.write_to_console("[SUCCESS] Tree visualization complete.")
@@ -754,75 +659,12 @@ class PanaceaApp(ctk.CTk):
                 self.write_to_console(f"[ERROR] Failed to load XML: {str(e)}")
                 self.current_xml_path = None
                 self.current_tree = None
-                self.tree_placeholder.grid()  # Show placeholder on error
+                self.tree_placeholder.grid()
                 self.update_file_ui(False)
-
-    def preview_pruned_tree(self):
-        """
-        Preview the tree with pruning applied.
-
-        Applies pruning to the currently displayed tree (which may be a previously pruned tree).
-        This allows for sequential, cumulative pruning operations.
-        Logs the operation to the console.
-        """
-        if not self.current_tree:
-            self.write_to_console("[WARNING] No tree loaded. Please load an XML file first.")
-            return
-
-        prune_label = self.prune_entry.get().strip()
-
-        if not prune_label:
-            self.write_to_console("[WARNING] Please enter a node label to prune.")
-            return
-
-        try:
-            # Use the currently displayed tree (which may be a previous prune result)
-            # or the original tree if no pruning has been done yet
-            tree_to_prune = self.displayed_tree if self.displayed_tree else self.current_tree
-            
-            self.write_to_console(f"[PRUNING] Applying pruning at node: {prune_label}")
-            pruned_tree = tree_to_prune.prune(prune_label)
-
-            # Update the displayed tree to the pruned result
-            self.displayed_tree = pruned_tree
-
-            self.write_to_console("[VISUALIZATION] Rendering pruned tree in Tree View tab...")
-            self.visualizer.draw_tree(pruned_tree)
-
-            self.write_to_console("[SUCCESS] Pruned tree preview displayed. You can apply additional pruning.")
-
-        except Exception as e:
-            self.write_to_console(f"[ERROR] Pruning failed: {str(e)}")
-
-    def reset_tree_to_original(self):
-        """
-        Reset the displayed tree to the original (unpruned) tree.
-
-        Clears the displayed tree variable and redisplays the original tree.
-        Clears the prune entry field for convenience.
-        """
-        if not self.current_tree:
-            self.write_to_console("[WARNING] No tree loaded. Please load an XML file first.")
-            return
-
-        self.displayed_tree = None
-        self.prune_entry.delete(0, "end")
-
-        self.write_to_console("[RESET] Displaying original tree...")
-        self.visualizer.draw_tree(self.current_tree)
-
-        self.write_to_console("[SUCCESS] Tree reset to original. Prune entry cleared.")
 
     def run_panacea(self):
         """
         Execute the PANACEA conversion process.
-
-        Parses the loaded XML file, generates a PRISM model (with or without time analysis
-        based on the checkbox), saves the model and properties files, and logs progress.
-        Handles errors gracefully and provides user feedback.
-
-        Raises:
-            Exception: If any step in the conversion process fails.
         """
         if not self.current_xml_path:
             return
@@ -844,8 +686,7 @@ class PanaceaApp(ctk.CTk):
 
         try:
             self.write_to_console("[1/3] Extracting data from R-ADT tree...")
-            
-            # Use the currently displayed tree (which may be pruned) or the original
+
             if self.displayed_tree:
                 tree = self.displayed_tree
                 self.write_to_console("[INFO] Using pruned tree for conversion.")
