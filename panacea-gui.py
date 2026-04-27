@@ -4,6 +4,9 @@ import os
 import time
 from PIL import Image, ImageDraw
 from typing import Optional
+import matplotlib.pyplot as plt
+from gui.visualizer import TreeVisualizer
+from gui.palette import PALETTE
 
 import tree_to_prism as tp
 
@@ -21,36 +24,24 @@ class PanaceaApp(ctk.CTk):
         Initialize the PANACEA GUI application.
 
         Sets up the main window, color palette, icons, and UI components including
-        sidebar and main content areas. Configures the initial state and console output.
+        sidebar, tabbed content areas (Home, Tree View, Statistics), and visualization.
+        Initializes the tree visualizer and configures the initial state and console output.
         """
         super().__init__()
 
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
 
-        self.palette = {
-            "bg": "#0E1621",
-            "panel": "#142131",
-            "card": "#1A2A3D",
-            "card_2": "#21344A",
-            "surface": "#28425E",
-            "accent": "#2F80ED",
-            "accent_hover": "#4B95F8",
-            "success": "#228B22",
-            "warning": "#F5A524",
-            "text": "#F6F8FB",
-            "muted": "#AAB6C5",
-            "border": "#31465E",
-            "log_bg": "#0A121C",
-            "danger": "#E05D5D"
-        }
+        self.palette = PALETTE
 
         self.title("PANACEA Desktop GUI")
-        self.geometry("1180x800")
+        self.geometry("1500x800")
         self.minsize(1080, 680)
         self.configure(fg_color=self.palette["bg"])
 
         self.current_xml_path: Optional[str] = None
+        self.current_tree = None
+        self.displayed_tree = None
         self.icons = self.build_icons()
 
         self.grid_columnconfigure(0, weight=0)
@@ -72,24 +63,17 @@ class PanaceaApp(ctk.CTk):
         )
         self.main_content.grid(row=0, column=1, padx=24, pady=24, sticky="nsew")
         self.main_content.grid_columnconfigure(0, weight=1)
-        self.main_content.grid_rowconfigure(2, weight=1)
+        self.main_content.grid_rowconfigure(0, weight=1)
 
         self.setup_sidebar()
-        self.setup_main_area()
+        self.setup_tabs()
         self.write_to_console("Interface ready. Import an XML file to start.")
 
-        # Handle window close event
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
     def build_icons(self):
         """
         Build and return a dictionary of custom icons used in the GUI.
-
-        Creates CTkImage objects for various UI elements like upload, generate, file, etc.
-        Each icon is generated programmatically using PIL.
-
-        Returns:
-            dict: A dictionary mapping icon names (str) to CTkImage objects.
         """
         return {
             "upload": self.make_icon("upload", 28),
@@ -104,16 +88,6 @@ class PanaceaApp(ctk.CTk):
     def make_icon(self, kind, size=24):
         """
         Generate a custom icon image based on the specified kind and size.
-
-        Uses PIL to draw vector-style icons programmatically. Supports various icon types
-        like upload, generate, file, log, clear, and clock.
-
-        Args:
-            kind (str): The type of icon to generate (e.g., "upload", "generate").
-            size (int, optional): The size of the icon in pixels. Defaults to 24.
-
-        Returns:
-            CTkImage: A CustomTkinter image object ready for use in widgets.
         """
         img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
@@ -170,12 +144,6 @@ class PanaceaApp(ctk.CTk):
     def write_to_console(self, text):
         """
         Write a timestamped message to the console textbox.
-
-        Formats the input text with a timestamp and special handling for separator lines
-        (starting with "---"). Updates the UI to show the new text and scroll to the end.
-
-        Args:
-            text (str): The message to write to the console.
         """
         timestamp = time.strftime("%H:%M:%S")
         clean_text = text.rstrip("\n")
@@ -195,8 +163,6 @@ class PanaceaApp(ctk.CTk):
     def clear_console(self):
         """
         Clear all text from the console textbox and log the action.
-
-        Resets the console to an empty state and writes a confirmation message.
         """
         self.textbox.configure(state="normal")
         self.textbox.delete("0.0", "end")
@@ -208,26 +174,27 @@ class PanaceaApp(ctk.CTk):
         Clear the currently loaded XML file.
 
         Resets the file status, disables the convert button, and updates the UI.
+        Also clears the tree visualization and shows the placeholder.
         """
         self.current_xml_path = None
+        self.current_tree = None
+        self.displayed_tree = None
+
+        self.visualizer.cleanup()
+        self.tree_placeholder.grid()
 
         self.update_file_ui(False)
-
         self.write_to_console("[INFO] XML file removed by the user.")
 
     def update_file_ui(self, is_loaded: bool, file_name: str = None):
         """
         Update the file-related UI elements based on whether a file is loaded.
-
-        Args:
-            is_loaded (bool): True if a file is loaded, False otherwise.
-            file_name (str, optional): The name of the loaded file, required if is_loaded is True.
         """
         if is_loaded and file_name:
             self.file_status_badge.configure(
                 text="XML ready",
-                fg_color="#1E3B32",
-                text_color="#A8F0D2"
+                fg_color=self.palette["status_ready_bg"],
+                text_color=self.palette["status_ready_text"]
             )
             self.file_name_label.configure(
                 text=file_name,
@@ -243,8 +210,8 @@ class PanaceaApp(ctk.CTk):
         else:
             self.file_status_badge.configure(
                 text="No XML",
-                fg_color="#3A2A2A",
-                text_color="#FFB4B4"
+                fg_color=self.palette["status_error_bg"],
+                text_color=self.palette["status_error_text"]
             )
             self.file_name_label.configure(
                 text="Select an XML file from the left column.",
@@ -260,9 +227,9 @@ class PanaceaApp(ctk.CTk):
     def on_closing(self):
         """
         Handle the window close event.
-
-        Properly terminates the application when the user closes the window.
         """
+        self.visualizer.cleanup()
+        plt.close('all')
         self.quit()
         self.destroy()
 
@@ -271,14 +238,31 @@ class PanaceaApp(ctk.CTk):
         Set up the sidebar UI components.
 
         Creates and configures the brand card, load button, file status display,
-        options cards with time analysis and pruning options, and footer label.
+        time analysis options card, and footer label.
         """
         self.setup_brand_card()
         self.setup_load_button()
         self.setup_file_card()
         self.setup_time_options_card()
-        self.setup_prune_options_card()
         self.setup_footer()
+
+    def setup_tabs(self):
+        """
+        Set up the tabbed content area with three main sections.
+        """
+        self.tabview = ctk.CTkTabview(self.main_content)
+        self.tabview.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
+
+        self.tab_home = self.tabview.add("Home")
+        self.tab_tree = self.tabview.add("Tree View")
+        # self.tab_stats = self.tabview.add("Statistics") Coming soon
+
+        self.tab_home.grid_columnconfigure(0, weight=1)
+        self.tab_home.grid_rowconfigure(2, weight=1)
+
+        self.setup_home_tab()
+        self.setup_tree_view_tab()
+        # self.setup_stats_tab() # Coming soon
 
     def setup_brand_card(self):
         """Set up the brand card with PANACEA title and description."""
@@ -368,8 +352,8 @@ class PanaceaApp(ctk.CTk):
         self.file_status_badge = ctk.CTkLabel(
             file_card,
             text="No XML",
-            fg_color="#3A2A2A",
-            text_color="#FFB4B4",
+            fg_color=self.palette["status_error_bg"],
+            text_color=self.palette["status_error_text"],
             corner_radius=999,
             padx=10,
             pady=6,
@@ -427,52 +411,6 @@ class PanaceaApp(ctk.CTk):
         )
         self.time_analysis.pack(anchor="w", padx=16, pady=(0, 16))
 
-    def setup_prune_options_card(self):
-        """Set up the pruning options card."""
-        prune_card = ctk.CTkFrame(
-            self.sidebar,
-            fg_color=self.palette["card"],
-            corner_radius=22,
-            border_width=1,
-            border_color=self.palette["border"]
-        )
-        prune_card.pack(fill="x", padx=22, pady=(0, 18))
-
-        ctk.CTkLabel(
-            prune_card,
-            text="Pruning Options",
-            image=self.icons["remove"],
-            compound="left",
-            font=ctk.CTkFont(size=15, weight="bold"),
-            text_color=self.palette["text"]
-        ).pack(anchor="w", padx=16, pady=(16, 6))
-
-        ctk.CTkLabel(
-            prune_card,
-            text="Optionally prune the tree at a specific node label to focus on a subtree.",
-            wraplength=260,
-            justify="left",
-            text_color=self.palette["muted"],
-            font=ctk.CTkFont(size=13)
-        ).pack(anchor="w", padx=16, pady=(0, 10))
-
-        ctk.CTkLabel(
-            prune_card,
-            text="Prune Label (optional):",
-            font=ctk.CTkFont(size=14),
-            text_color=self.palette["muted"]
-        ).pack(anchor="w", padx=16, pady=(0, 5))
-
-        self.prune_entry = ctk.CTkEntry(
-            prune_card,
-            placeholder_text="Enter node label to prune",
-            font=ctk.CTkFont(size=14),
-            fg_color=self.palette["surface"],
-            border_color=self.palette["border"],
-            text_color=self.palette["text"]
-        )
-        self.prune_entry.pack(fill="x", padx=16, pady=(0, 16))
-
     def setup_footer(self):
         """Set up the footer label."""
         footer = ctk.CTkLabel(
@@ -483,17 +421,11 @@ class PanaceaApp(ctk.CTk):
         )
         footer.pack(side="bottom", pady=20)
 
-    def setup_main_area(self):
+    def setup_home_tab(self):
         """
-        Set up the main content area UI components.
-
-        Creates the header, hero section with generation button, and console area
-        with output textbox and clear button.
+        Set up the Home tab content area.
         """
-        header = ctk.CTkFrame(
-            self.main_content,
-            fg_color="transparent"
-        )
+        header = ctk.CTkFrame(self.tab_home, fg_color="transparent")
         header.grid(row=0, column=0, sticky="ew", pady=(0, 18))
         header.grid_columnconfigure(0, weight=1)
 
@@ -512,7 +444,7 @@ class PanaceaApp(ctk.CTk):
         ).grid(row=1, column=0, sticky="w", pady=(4, 0))
 
         hero = ctk.CTkFrame(
-            self.main_content,
+            self.tab_home,
             fg_color=self.palette["card"],
             corner_radius=26,
             border_width=1,
@@ -570,7 +502,7 @@ class PanaceaApp(ctk.CTk):
         self.btn_convert.configure(text_color=self.palette["text"])
 
         console_card = ctk.CTkFrame(
-            self.main_content,
+            self.tab_home,
             fg_color=self.palette["card_2"],
             corner_radius=26,
             border_width=1,
@@ -602,7 +534,7 @@ class PanaceaApp(ctk.CTk):
             height=42,
             corner_radius=14,
             fg_color="transparent",
-            hover_color="#2A3A4E",
+            hover_color=self.palette["button_hover_secondary"],
             border_width=1,
             border_color=self.palette["border"],
             text_color=self.palette["text"],
@@ -624,33 +556,119 @@ class PanaceaApp(ctk.CTk):
         self.textbox.grid(row=1, column=0, sticky="nsew", padx=18, pady=(0, 18))
         self.textbox.configure(state="disabled")
 
+    def setup_tree_view_tab(self):
+        """
+        Set up the Tree View tab content area.
+
+        Initializes the TreeVisualizer with right-click context menu callbacks
+        for pruning (on_prune) and resetting (on_reset) the tree directly
+        from the graphical view.
+        """
+        self.tab_tree.grid_columnconfigure(0, weight=1)
+        self.tab_tree.grid_rowconfigure(0, weight=1)
+
+        self.tree_placeholder = ctk.CTkLabel(
+            self.tab_tree,
+            text="Please load a valid XML file to visualize the attack-defense tree.\n\nTip: right-click on a node to prune the tree or reset it.",
+            font=ctk.CTkFont(size=16),
+            text_color=self.palette["muted"]
+        )
+        self.tree_placeholder.grid(row=0, column=0, padx=20, pady=20)
+
+        self.visualizer = TreeVisualizer(
+            self.tab_tree,
+            on_prune=self._on_context_prune,
+            on_reset=self._on_context_reset
+        )
+
+
+    # STATISTICS TAB COMING SOON - DEFINED FUNCION BUT NOT IMPLEMENTED YET
+
+
+    # def setup_stats_tab(self):
+    #     """Set up the Statistics tab content area."""
+    #     self.tab_stats.grid_columnconfigure(0, weight=1)
+    #     self.tab_stats.grid_rowconfigure(0, weight=1)
+
+    #     placeholder = ctk.CTkLabel(
+    #         self.tab_stats,
+    #         text="Statistics and metrics are currently under development.\nComing soon ...",
+    #         font=ctk.CTkFont(size=16),
+    #         text_color=self.palette["muted"]
+    #     )
+    #     placeholder.grid(row=0, column=0, padx=20, pady=20)
+
+    def _on_context_prune(self, node_label: str):
+        """
+        Callback invoked when the user selects 'Pota da qui' from the context menu.
+
+        Applies pruning starting from the given node label on the currently displayed
+        tree (or the original if no pruning has been applied yet), updates the visualization,
+        and logs the operation to the console.
+
+        Args:
+            node_label (str): The label of the node to prune from.
+        """
+        if not self.current_tree:
+            self.write_to_console("[WARNING] No tree loaded.")
+            return
+        try:
+            tree_to_prune = self.displayed_tree if self.displayed_tree else self.current_tree
+            self.write_to_console(f"[PRUNING] Applying pruning at node: {node_label}")
+            pruned_tree = tree_to_prune.prune(node_label)
+            self.displayed_tree = pruned_tree
+            self.visualizer.draw_tree(pruned_tree)
+            self.write_to_console("[SUCCESS] Pruned tree displayed. Right-click again to prune further.")
+        except Exception as e:
+            self.write_to_console(f"[ERROR] Pruning failed: {str(e)}")
+
+    def _on_context_reset(self):
+        """
+        Callback invoked when the user selects 'Reimposta albero' from the context menu.
+
+        Resets the visualization to the original unpruned tree and logs the operation.
+        """
+        if not self.current_tree:
+            self.write_to_console("[WARNING] No tree loaded.")
+            return
+        self.displayed_tree = None
+        self.write_to_console("[RESET] Displaying original tree...")
+        self.visualizer.draw_tree(self.current_tree)
+        self.write_to_console("[SUCCESS] Tree reset to original.")
+
     def load_xml(self):
         """
         Open a file dialog to select and load an XML file.
-
-        Updates the UI to reflect the loaded file status, enables the convert button,
-        and logs the action to the console.
         """
         file_path = filedialog.askopenfilename(filetypes=[("XML files", "*.xml")])
 
         if file_path:
-            self.current_xml_path = file_path
-            file_name = os.path.basename(file_path)
+            try:
+                self.current_xml_path = file_path
+                file_name = os.path.basename(file_path)
 
-            self.write_to_console(f"[INFO] XML loaded successfully: {file_name}")
+                self.write_to_console(f"[INFO] XML loaded successfully: {file_name}")
+                self.write_to_console("[PARSING] Building tree structure...")
+                self.current_tree = tp.parse_file(file_path)
+                self.displayed_tree = None
 
-            self.update_file_ui(True, file_name)
+                self.write_to_console("[VISUALIZATION] Rendering tree in Tree View tab...")
+                self.visualizer.draw_tree(self.current_tree)
+                self.tree_placeholder.grid_remove()
+
+                self.update_file_ui(True, file_name)
+                self.write_to_console("[SUCCESS] Tree visualization complete.")
+
+            except Exception as e:
+                self.write_to_console(f"[ERROR] Failed to load XML: {str(e)}")
+                self.current_xml_path = None
+                self.current_tree = None
+                self.tree_placeholder.grid()
+                self.update_file_ui(False)
 
     def run_panacea(self):
         """
         Execute the PANACEA conversion process.
-
-        Parses the loaded XML file, generates a PRISM model (with or without time analysis
-        based on the checkbox), saves the model and properties files, and logs progress.
-        Handles errors gracefully and provides user feedback.
-
-        Raises:
-            Exception: If any step in the conversion process fails.
         """
         if not self.current_xml_path:
             return
@@ -672,13 +690,15 @@ class PanaceaApp(ctk.CTk):
 
         try:
             self.write_to_console("[1/3] Extracting data from R-ADT tree...")
-            tree = tp.parse_file(self.current_xml_path)
 
-            prune_label = self.prune_entry.get()  # Prende il testo dal nuovo campo
-
-            if prune_label:  # Se l'utente ha scritto qualcosa
-                self.write_to_console(f"[INFO] Pruning tree at node: {prune_label}")
-                tree = tree.prune(prune_label)  # Usa la funzione di tree.py
+            if self.displayed_tree:
+                tree = self.displayed_tree
+                self.write_to_console("[INFO] Using pruned tree for conversion.")
+            elif self.current_tree:
+                tree = self.current_tree
+                self.write_to_console("[INFO] Using original tree from file load.")
+            else:
+                tree = tp.parse_file(self.current_xml_path)
 
             self.write_to_console("[2/3] Translating to Stochastic Game...")
             if use_time:
