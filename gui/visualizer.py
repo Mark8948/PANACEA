@@ -1,246 +1,824 @@
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import networkx as nx
-from gui.palette import TREE_VISUALIZER_PALETTE
+"""
+TreeVisualizer — interactive, draggable, zoomable ADTree renderer.
+
+Renders the attack-defence tree on an embedded Matplotlib canvas with:
+  - Hierarchical layout with glowing node borders
+  - Attacker nodes: crimson  |  Defender nodes: forest-green
+  - Labelled edges (action name) drawn mid-arc
+  - Pan by left-drag on background, zoom by scroll wheel
+  - Right-click context menu: Prune / Reset
+  - Node drag: hold Ctrl + left-drag on a node to reposition it manually (High-Performance 60FPS)
+"""
+
 import textwrap
 import tkinter as tk
+from typing import Any, Optional, Tuple
+import importlib
+import sys
 
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.figure import Figure
+from matplotlib.axes import Axes
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import numpy as np
+
+# Force reload of palette module to avoid caching issues
+if "gui.palette" in sys.modules:
+    importlib.reload(sys.modules["gui.palette"])
+
+from gui.palette import TREE_VISUALIZER_PALETTE as TVP
+
+try:
+    from gui.palette import PALETTE
+    APP_BG = PALETTE.get("bg", "#0E1621")
+except Exception:
+    APP_BG = "#0E1621"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _node_radius(label: str) -> float:
+    """
+    Determines the visual radius of a node based on its label length.
+
+    Args:
+        label (str): The label text of the node.
+
+    Returns:
+        float: The calculated radius for the node.
+    """
+    n = len(label)
+    if n <= 8:
+        return 0.055
+    if n <= 16:
+        return 0.068
+    return 0.085
+
+
+def _get_color(key: str, default: str = "#CCCCCC") -> str:
+    """
+    Safely retrieves a color hex code from the palette.
+
+    Args:
+        key (str): The dictionary key for the requested color.
+        default (str, optional): Fallback color if the key is not found. Defaults to "#CCCCCC".
+
+    Returns:
+        str: The hex color code.
+    """
+    try:
+        return TVP.get(key, default)
+    except Exception:
+        return default
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TreeVisualizer
+# ─────────────────────────────────────────────────────────────────────────────
 
 class TreeVisualizer:
     """
-    Handles visualization of attack-defense trees using Matplotlib and NetworkX.
+    Embeds an interactive, draggable, zoomable tree graph in a CTk/Tk frame.
 
-    This class is responsible for rendering tree structures as interactive graphs,
-    with node coloring based on player roles (Attacker/Defender) and hierarchical layouts.
-    Supports right-click context menu for pruning and resetting the tree.
+    Controls:
+        Scroll wheel          — zoom in / out centred on cursor
+        Left-drag (canvas)    — pan the view
+        Ctrl + left-drag node — reposition a single node manually (Real-time update)
+        Right-click           — context menu (Prune / Reset)
     """
 
     def __init__(self, master_frame, on_prune=None, on_reset=None):
         """
-        Initialize a TreeVisualizer instance.
+        Initializes the TreeVisualizer instance.
 
         Args:
-            master_frame: The parent Tkinter frame where the visualization will be embedded.
-            on_prune (callable): Callback invoked with the node label when the user selects
-                                 "Pota da qui" from the context menu. Receives a str argument.
-            on_reset (callable): Callback invoked when the user selects "Reimposta albero"
-                                 from the context menu. No arguments.
+            master_frame (tk.Frame): The parent Tkinter/CustomTkinter frame.
+            on_prune (callable, optional): Callback triggered when a node is pruned.
+            on_reset (callable, optional): Callback triggered when the tree is reset.
+
+        Returns:
+            None
         """
         self.master_frame = master_frame
-        self.canvas = None
-        self.fig = None
-        self.ax = None
-        self._pos = {}
-        self._context_menu = None
-        self._hovered_node = None
-
         self.on_prune = on_prune
         self.on_reset = on_reset
 
-    def get_hierarchical_pos(self, G, root, width=1., vert_gap=0.3, vert_loc=0, xcenter=0.5, pos=None, parent=None):
+        self.canvas: Optional[FigureCanvasTkAgg] = None
+        self.fig: Optional[Figure] = None
+        self.ax: Optional[Axes] = None
+
+        self._G: Optional[Any] = None
+        self._tree: Optional[Any] = None
+        self._pos: dict[str, Tuple[float, float]] = {}
+        self._role: dict[str, str] = {}
+
+        # Dictionaries for high-performance updates (Avoids ax.cla())
+        self._drawn_nodes: dict = {}
+        self._drawn_edges: dict = {}
+
+        # View state
+        self._view_xlim: Optional[Tuple[float, float]] = None
+        self._view_ylim: Optional[Tuple[float, float]] = None
+
+        # Pan state
+        self._pan_active = False
+        self._pan_start_x = 0.0
+        self._pan_start_y = 0.0
+        self._pan_start_xlim: Optional[Tuple[float, float]] = None
+        self._pan_start_ylim: Optional[Tuple[float, float]] = None
+
+        # Node-drag state
+        self._drag_node: Optional[str] = None
+        self._ctrl_held = False
+
+        self._context_menu = None
+
+    # ── Public API ─────────────────────────────────────────────────────────
+
+    def draw_tree(self, tree_obj) -> None:
         """
-        Calculate hierarchical positions for nodes in a tree graph.
+        Renders the tree object from scratch, replacing any previous visualization.
 
         Args:
-            G (networkx.DiGraph): The directed graph representing the tree.
-            root: The root node label to start positioning from.
-            width (float): The width allocated for the current subtree. Default is 1.0.
-            vert_gap (float): The vertical gap between levels. Default is 0.3.
-            vert_loc (float): The vertical location for the current level. Default is 0.
-            xcenter (float): The x-center position for the current subtree. Default is 0.5.
-            pos (dict): Dictionary to store node positions. If None, a new dict is created.
-            parent: The parent node label, used to avoid backtracking in undirected graphs.
+            tree_obj (Any): The parsed tree object to be rendered.
 
         Returns:
-            dict: A dictionary mapping node labels to (x, y) positions.
+            None
+        """
+        import traceback
+
+        try:
+            self._cleanup_canvas()
+
+            self._tree = tree_obj
+            G = tree_obj.to_graph()
+            self._G = G
+
+            self._role = {}
+            for node in tree_obj.nodes:
+                self._role[node.label] = node.role.strip() if node.role else "Attacker"
+
+            root = tree_obj.root.label if tree_obj.root else next(iter(G.nodes))
+            self._pos = self._hierarchical_pos(G, root)
+
+            # Create the figure
+            fig = Figure(figsize=(10, 6), dpi=100)
+            ax = fig.add_subplot(111)
+            self.fig = fig
+            self.ax = ax
+
+            fig.patch.set_facecolor(APP_BG)
+            ax.set_facecolor(APP_BG)
+            
+            ax.set_aspect("equal")
+            ax.axis("off")
+            fig.subplots_adjust(left=0.0, right=1.0, top=1.0, bottom=0.0)
+
+            # Clean direct CTkinter -> Tkinter integration
+            self.canvas = FigureCanvasTkAgg(fig, master=self.master_frame)
+            widget = self.canvas.get_tk_widget()
+            widget.configure(bg=APP_BG, highlightthickness=0, bd=0)
+
+            # Use pack so the canvas expands inside the CTk tab
+            widget.pack(fill="both", expand=True)
+
+            self._fit_view(reset=True)
+            self._draw_all()
+            self.canvas.draw()
+            self._bind_events()
+
+        except Exception as e:
+            print(f"[DEBUG] TreeVisualizer.draw_tree error: {e}")
+            traceback.print_exc()
+            raise
+
+    def cleanup(self) -> None:
+        """
+        Releases all matplotlib and tkinter resources used by the visualizer.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
+        self._dismiss_menu()
+        self._cleanup_canvas()
+        self._pos = {}
+        self._role = {}
+        self._drawn_nodes.clear()
+        self._drawn_edges.clear()
+        self._G = None
+        self._tree = None
+        self._view_xlim = None
+        self._view_ylim = None
+
+    # ── Drawing ────────────────────────────────────────────────────────────
+
+    def _draw_all(self) -> None:
+        """
+        Clears axes and redraws everything based on node positions.
+        Saves visual Artists to dictionary for high-performance repositioning.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
+        ax = self.ax
+        fig = self.fig
+        G = self._G
+
+        if ax is None or fig is None or G is None or not self._pos:
+            return
+
+        current_xlim = self._view_xlim
+        current_ylim = self._view_ylim
+
+        ax.cla()
+        self._drawn_nodes.clear()
+        self._drawn_edges.clear()
+
+        fig.patch.set_facecolor(APP_BG)
+        ax.set_facecolor(APP_BG)
+        ax.set_aspect("equal")
+        ax.axis("off")
+        fig.subplots_adjust(left=0.0, right=1.0, top=1.0, bottom=0.0)
+
+        pos = self._pos
+        role = self._role
+
+        if current_xlim is None or current_ylim is None:
+            self._fit_view(reset=True)
+            current_xlim = self._view_xlim
+            current_ylim = self._view_ylim
+
+        if current_xlim is not None and current_ylim is not None:
+            x_lo, x_hi = current_xlim
+            y_lo, y_hi = current_ylim
+        else:
+            xs = [x for x, _ in pos.values()]
+            ys = [y for _, y in pos.values()]
+            x_lo, x_hi = min(xs) - 0.4, max(xs) + 0.4
+            y_lo, y_hi = min(ys) - 0.4, max(ys) + 0.4
+
+        # Draw the visible background grid
+        gx = np.arange(round(x_lo, 1), x_hi + 0.05, 0.1)
+        gy = np.arange(round(y_lo, 1), y_hi + 0.05, 0.1)
+        grid_color = _get_color("grid", "#1C2B3A")
+        for gxi in gx:
+            for gyi in gy:
+                ax.plot(gxi, gyi, ".", color=grid_color, markersize=1, zorder=0, alpha=0.35)
+
+        # Edges
+        for u, v, data in G.edges(data=True):
+            if u not in pos or v not in pos:
+                continue
+
+            x0, y0 = pos[u]
+            x1, y1 = pos[v]
+
+            target_role = role.get(v, "Attacker")
+            color = _get_color("edge_dashed", "#5D9CEC") if target_role == "Defender" else _get_color("edge_solid", "#7F8C8D")
+            lstyle = "--" if target_role == "Defender" else "-"
+
+            ann = ax.annotate(
+                "",
+                xy=(x1, y1),
+                xytext=(x0, y0),
+                arrowprops=dict(
+                    arrowstyle="-|>",
+                    color=color,
+                    lw=1.8,
+                    linestyle=lstyle,
+                    connectionstyle="arc3,rad=0.08",
+                ),
+                zorder=1,
+            )
+
+            action = data.get("action", "")
+            txt = None
+            if action:
+                mx = (x0 + x1) / 2 + 0.02
+                my = (y0 + y1) / 2 + 0.02
+                txt = ax.text(
+                    mx, my, action,
+                    fontsize=7,
+                    color=_get_color("edge_label", "#BDC3C7"),
+                    ha="center", va="center", zorder=3,
+                    bbox=dict(
+                        boxstyle="round,pad=0.22",
+                        facecolor=APP_BG,
+                        edgecolor="none",
+                        alpha=0.78,
+                    ),
+                )
+            
+            # Save the Edge Artist for quick updates
+            self._drawn_edges[(u, v)] = {'arrow': ann, 'text': txt}
+
+        # Nodes
+        for label, (x, y) in pos.items():
+            r = _node_radius(label)
+            is_def = role.get(label, "Attacker") == "Defender"
+
+            fill_c = _get_color("defender", "#1E8449") if is_def else _get_color("attacker", "#C0392B")
+            border_c = _get_color("defender_border", "#27AE60") if is_def else _get_color("attacker_border", "#E74C3C")
+            glow_c = _get_color("defender_glow", "#27AE60") if is_def else _get_color("attacker_glow", "#E74C3C")
+
+            glow1 = mpatches.Circle((x, y), r + 0.022, color=glow_c, alpha=0.14, zorder=2)
+            glow2 = mpatches.Circle((x, y), r + 0.010, color=glow_c, alpha=0.28, zorder=2)
+            fill = mpatches.Circle((x, y), r, color=fill_c, zorder=3)
+            border = mpatches.Circle((x, y), r, fill=False, edgecolor=border_c, linewidth=2.2, zorder=4)
+
+            ax.add_patch(glow1)
+            ax.add_patch(glow2)
+            ax.add_patch(fill)
+            ax.add_patch(border)
+
+            wrapped = "\n".join(textwrap.wrap(label, width=12))
+            node_txt = ax.text(
+                x, y, wrapped,
+                fontsize=8, fontweight="bold",
+                color=_get_color("node_text", "#FFFFFF"),
+                ha="center", va="center", zorder=5,
+                multialignment="center",
+            )
+
+            # Save the Node Artist for quick updates
+            self._drawn_nodes[label] = {
+                'glow1': glow1, 'glow2': glow2, 'fill': fill, 'border': border, 'text': node_txt
+            }
+
+        att_patch = mpatches.Patch(color=_get_color("attacker", "#C0392B"), label="Attacker")
+        def_patch = mpatches.Patch(color=_get_color("defender", "#1E8449"), label="Defender")
+        ax.legend(
+            handles=[att_patch, def_patch],
+            loc="upper right",
+            framealpha=0.35,
+            facecolor=APP_BG,
+            edgecolor=_get_color("edge_solid", "#7F8C8D"),
+            labelcolor=_get_color("node_text", "#FFFFFF"),
+            fontsize=9,
+        )
+
+        if current_xlim is not None and current_ylim is not None:
+            ax.set_xlim(current_xlim)
+            ax.set_ylim(current_ylim)
+
+        if self.canvas is not None:
+            self.canvas.draw_idle()
+
+    def _fit_view(self, reset: bool = False) -> None:
+        """
+        Computes a stable viewport boundary to fill the available canvas area efficiently.
+
+        Args:
+            reset (bool, optional): If True, ignores existing limits and recalculates. Defaults to False.
+
+        Returns:
+            None
+        """
+        ax = self.ax
+        if ax is None or not self._pos:
+            return
+
+        if not reset and self._view_xlim is not None and self._view_ylim is not None:
+            ax.set_xlim(self._view_xlim)
+            ax.set_ylim(self._view_ylim)
+            return
+
+        xs = [x for x, _ in self._pos.values()]
+        ys = [y for _, y in self._pos.values()]
+
+        x_min, x_max = min(xs), max(xs)
+        y_min, y_max = min(ys), max(ys)
+
+        dx = max(0.2, x_max - x_min)
+        dy = max(0.2, y_max - y_min)
+
+        pad_x = max(0.15, dx * 0.18)
+        pad_y = max(0.15, dy * 0.18)
+
+        # Maintain initial limits based on window aspect ratio
+        if self.fig:
+            fig_w, fig_h = self.fig.get_size_inches()
+            aspect = fig_w / fig_h if fig_h > 0 else 1.0
+            
+            data_w = (x_max + pad_x) - (x_min - pad_x)
+            data_h = (y_max + pad_y) - (y_min - pad_y)
+            data_aspect = data_w / data_h if data_h > 0 else 1.0
+
+            if data_aspect < aspect:
+                # It's narrower, widen the horizontal margins
+                extra_w = (data_h * aspect) - data_w
+                self._view_xlim = (x_min - pad_x - extra_w/2, x_max + pad_x + extra_w/2)
+                self._view_ylim = (y_min - pad_y, y_max + pad_y)
+            else:
+                # It's wider, increase the vertical margins
+                extra_h = (data_w / aspect) - data_h
+                self._view_xlim = (x_min - pad_x, x_max + pad_x)
+                self._view_ylim = (y_min - pad_y - extra_h/2, y_max + pad_y + extra_h/2)
+        else:
+            self._view_xlim = (x_min - pad_x, x_max + pad_x)
+            self._view_ylim = (y_min - pad_y, y_max + pad_y)
+
+        ax.set_xlim(self._view_xlim)
+        ax.set_ylim(self._view_ylim)
+
+    # ── Layout ─────────────────────────────────────────────────────────────
+
+    def _hierarchical_pos(
+        self,
+        G,
+        root,
+        width=2.5,
+        vert_gap=0.28,
+        vert_loc=0.0,
+        xcenter=0.5,
+        pos=None,
+        parent=None,
+    ):
+        """
+        Recursively calculates a top-down hierarchical layout for the nodes.
+
+        Args:
+            G (networkx.Graph): The networkx graph of the tree.
+            root (str): The root node label.
+            width (float, optional): The horizontal space allocated for this branch. Defaults to 2.5.
+            vert_gap (float, optional): Vertical spacing between layers. Defaults to 0.28.
+            vert_loc (float, optional): The vertical coordinate of the current node. Defaults to 0.0.
+            xcenter (float, optional): The horizontal coordinate of the current node. Defaults to 0.5.
+            pos (dict, optional): Dictionary holding accumulating positions. Defaults to None.
+            parent (str, optional): The parent node label (used to prevent backtracking). Defaults to None.
+
+        Returns:
+            dict: The dictionary mapping node labels to (x, y) coordinates.
         """
         if pos is None:
-            pos = {root: (xcenter, vert_loc)}
-        else:
-            pos[root] = (xcenter, vert_loc)
+            pos = {}
 
-        children = list(G.neighbors(root))
-        if not isinstance(G, nx.DiGraph) and parent is not None:
-            children.remove(parent)
+        pos[root] = (xcenter, vert_loc)
+        children = [n for n in G.neighbors(root) if n != parent]
 
-        if len(children) != 0:
-            min_width = 0.15
-            calculated_width = max(width / len(children), min_width * len(children))
-            dx = calculated_width / len(children) if len(children) > 0 else width
-
-            total_width = dx * len(children)
-            nextx = xcenter - total_width / 2 + dx / 2
+        if children:
+            min_w = 0.38
+            dx = max(width / len(children), min_w)
+            total_w = dx * len(children)
+            nextx = xcenter - total_w / 2 + dx / 2
 
             for child in children:
-                pos = self.get_hierarchical_pos(G, child, width=dx * 0.8, vert_gap=vert_gap,
-                                                vert_loc=vert_loc - vert_gap, xcenter=nextx,
-                                                pos=pos, parent=root)
+                pos = self._hierarchical_pos(
+                    G,
+                    child,
+                    width=dx * 0.95,
+                    vert_gap=vert_gap,
+                    vert_loc=vert_loc - vert_gap,
+                    xcenter=nextx,
+                    pos=pos,
+                    parent=root,
+                )
                 nextx += dx
 
         return pos
 
-    def _get_node_at(self, xdata, ydata, threshold=0.05):
+    # ── Event binding ──────────────────────────────────────────────────────
+
+    def _bind_events(self) -> None:
         """
-        Return the label of the node closest to (xdata, ydata), or None if too far.
+        Binds all matplotlib interaction events to their handler functions.
 
         Args:
-            xdata (float): X coordinate in data space.
-            ydata (float): Y coordinate in data space.
-            threshold (float): Maximum distance to consider a hit.
+            None
 
         Returns:
-            str or None: The label of the nearest node within threshold, or None.
+            None
         """
-        closest = None
-        min_dist = float("inf")
-        for label, (nx_x, ny_y) in self._pos.items():
-            dist = ((xdata - nx_x) ** 2 + (ydata - ny_y) ** 2) ** 0.5
-            if dist < min_dist:
-                min_dist = dist
-                closest = label
-        if min_dist <= threshold:
-            return closest
-        return None
-
-    def _show_context_menu(self, event):
-        """
-        Handle right-click on the Matplotlib canvas.
-
-        Converts the pixel position to data coordinates, finds the nearest node,
-        and shows a Tkinter context menu with pruning and reset options.
-
-        Args:
-            event: The Matplotlib MouseEvent from the button_press_event.
-        """
-        if event.inaxes is None or not self._pos:
+        fig = self.fig
+        canvas = self.canvas
+        if fig is None or canvas is None:
             return
 
-        node_label = self._get_node_at(event.xdata, event.ydata)
+        fc = fig.canvas
+        fc.mpl_connect("scroll_event", self._on_scroll)
+        fc.mpl_connect("button_press_event", self._on_press)
+        fc.mpl_connect("button_release_event", self._on_release)
+        fc.mpl_connect("motion_notify_event", self._on_motion)
+        fc.mpl_connect("key_press_event", self._on_key_press)
+        fc.mpl_connect("key_release_event", self._on_key_release)
 
-        if self._context_menu:
-            try:
-                self._context_menu.destroy()
-            except Exception:
-                pass
+        # Use the Configure event of the master_frame (CTkFrame) instead of the widget
+        self.master_frame.bind("<Configure>", self._on_resize)
 
-        menu = tk.Menu(self.master_frame, tearoff=0, bg="#1A2A3D", fg="#F6F8FB",
-                       activebackground="#2F80ED", activeforeground="#F6F8FB",
-                       font=("Segoe UI", 11), bd=0, relief="flat")
+    # ── Window Resizing ────────────────────────────────────────────────────
+
+    def _on_resize(self, event) -> None:
+        """
+        Forces matplotlib to adapt to the new CTk window size upon resize events.
+
+        Args:
+            event (tk.Event): The tkinter resize event.
+
+        Returns:
+            None
+        """
+        fig = self.fig
+        canvas = self.canvas
+        if fig is None or canvas is None:
+            return
+
+        # Update frame geometry to ensure we get the latest measurements
+        self.master_frame.update_idletasks()
+        
+        w = self.master_frame.winfo_width()
+        h = self.master_frame.winfo_height()
+        
+        if w < 10 or h < 10:
+            return
+
+        dpi = fig.get_dpi()
+        fig.set_size_inches(w / dpi, h / dpi, forward=False)
+        fig.subplots_adjust(left=0.0, right=1.0, top=1.0, bottom=0.0)
+        
+        # Keep the view updated based on resize (prevents skewed shrinking)
+        self._fit_view(reset=True)
+        canvas.draw_idle()
+
+    # ── Zoom ───────────────────────────────────────────────────────────────
+
+    def _on_scroll(self, event) -> None:
+        """
+        Handles mouse scroll events to zoom in or out on the canvas.
+
+        Args:
+            event (matplotlib.backend_bases.MouseEvent): The matplotlib scroll event.
+
+        Returns:
+            None
+        """
+        ax = self.ax
+        if ax is None or event.inaxes != ax:
+            return
+        if event.xdata is None or event.ydata is None:
+            return
+
+        # INVERTED: "up" zooms in (1 / 1.15)
+        factor = (1 / 1.15) if event.button == "up" else 1.15
+        
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+
+        xlim_new = tuple(event.xdata + (x - event.xdata) * factor for x in xlim)
+        ylim_new = tuple(event.ydata + (y - event.ydata) * factor for y in ylim)
+
+        ax.set_xlim(xlim_new)
+        ax.set_ylim(ylim_new)
+        self._view_xlim = xlim_new
+        self._view_ylim = ylim_new
+
+        if self.canvas is not None:
+            self.canvas.draw_idle()
+
+    # ── Pan / Node-drag ────────────────────────────────────────────────────
+
+    def _on_press(self, event) -> None:
+        """
+        Handles mouse click events to initiate node dragging, panning, or open the context menu.
+
+        Args:
+            event (matplotlib.backend_bases.MouseEvent): The matplotlib mouse press event.
+
+        Returns:
+            None
+        """
+        ax = self.ax
+        if ax is None:
+            return
+
+        if event.button == 1 and event.inaxes == ax:
+            node = self._hit_node(event.xdata, event.ydata)
+            if self._ctrl_held and node:
+                self._drag_node = node
+            else:
+                self._pan_active = True
+                self._pan_start_x = event.x
+                self._pan_start_y = event.y
+                self._pan_start_xlim = ax.get_xlim()
+                self._pan_start_ylim = ax.get_ylim()
+        elif event.button == 3:
+            self._show_context_menu(event)
+
+    def _on_release(self, event) -> None:
+        """
+        Handles mouse release events to stop dragging or panning operations.
+
+        Args:
+            event (matplotlib.backend_bases.MouseEvent): The matplotlib mouse release event.
+
+        Returns:
+            None
+        """
+        if event.button == 1:
+            self._pan_active = False
+            self._drag_node = None
+
+    def _on_motion(self, event) -> None:
+        """
+        Handles mouse motion events to process active pan or high-performance node drag updates.
+
+        Args:
+            event (matplotlib.backend_bases.MouseEvent): The matplotlib mouse motion event.
+
+        Returns:
+            None
+        """
+        ax = self.ax
+        if ax is None or event.inaxes != ax:
+            return
+
+        # NODE DRAG MANAGEMENT (HIGH PERFORMANCE)
+        if self._drag_node and event.xdata is not None and event.ydata is not None:
+            nx, ny = event.xdata, event.ydata
+            self._pos[self._drag_node] = (nx, ny)
+
+            # 1. Update only the visual Artists of the node (without clearing the scene)
+            node_arts = self._drawn_nodes.get(self._drag_node)
+            if node_arts:
+                node_arts['glow1'].set_center((nx, ny))
+                node_arts['glow2'].set_center((nx, ny))
+                node_arts['fill'].set_center((nx, ny))
+                node_arts['border'].set_center((nx, ny))
+                node_arts['text'].set_position((nx, ny))
+
+            # 2. Update only the arrows and texts of connected edges
+            for (u, v), edge_arts in self._drawn_edges.items():
+                if u == self._drag_node or v == self._drag_node:
+                    x0, y0 = self._pos[u]
+                    x1, y1 = self._pos[v]
+                    
+                    edge_arts['arrow'].xy = (x1, y1)
+                    # Leverage the fact that xytext coincides with position
+                    edge_arts['arrow'].set_position((x0, y0)) 
+                    
+                    if edge_arts['text']:
+                        mx = (x0 + x1) / 2 + 0.02
+                        my = (y0 + y1) / 2 + 0.02
+                        edge_arts['text'].set_position((mx, my))
+
+            # Request quick canvas refresh
+            if self.canvas is not None:
+                self.canvas.draw_idle()
+            return
+
+        # BACKGROUND PAN MANAGEMENT
+        if (
+            self._pan_active
+            and self._pan_start_xlim is not None
+            and self._pan_start_ylim is not None
+        ):
+            dx_pixels = event.x - self._pan_start_x
+            dy_pixels = event.y - self._pan_start_y
+
+            inv = ax.transData.inverted()
+            x0, y0 = inv.transform((0, 0))
+            x1, y1 = inv.transform((dx_pixels, dy_pixels))
+            dx_data = x1 - x0
+            dy_data = y1 - y0
+
+            new_xlim = (
+                self._pan_start_xlim[0] - dx_data,
+                self._pan_start_xlim[1] - dx_data,
+            )
+            new_ylim = (
+                self._pan_start_ylim[0] - dy_data,
+                self._pan_start_ylim[1] - dy_data,
+            )
+
+            ax.set_xlim(new_xlim)
+            ax.set_ylim(new_ylim)
+            self._view_xlim = new_xlim
+            self._view_ylim = new_ylim
+
+            if self.canvas is not None:
+                self.canvas.draw_idle()
+
+    def _on_key_press(self, event) -> None:
+        """
+        Handles keyboard press events, listening specifically for the Control key.
+
+        Args:
+            event (matplotlib.backend_bases.KeyEvent): The matplotlib key press event.
+
+        Returns:
+            None
+        """
+        if event.key in ("control", "ctrl"):
+            self._ctrl_held = True
+
+    def _on_key_release(self, event) -> None:
+        """
+        Handles keyboard release events to deactivate the Control key flag.
+
+        Args:
+            event (matplotlib.backend_bases.KeyEvent): The matplotlib key release event.
+
+        Returns:
+            None
+        """
+        if event.key in ("control", "ctrl"):
+            self._ctrl_held = False
+
+    # ── Hit-testing ────────────────────────────────────────────────────────
+
+    def _hit_node(self, xdata, ydata) -> Optional[str]:
+        """
+        Identifies if a given (x, y) coordinate falls within a rendered node's radius.
+
+        Args:
+            xdata (float): The x-coordinate in data space.
+            ydata (float): The y-coordinate in data space.
+
+        Returns:
+            str or None: The label of the hit node, or None if no node was hit.
+        """
+        if xdata is None or ydata is None:
+            return None
+
+        best = None
+        best_d = float("inf")
+
+        for label, (nx_, ny_) in self._pos.items():
+            r = _node_radius(label) + 0.02
+            d = ((xdata - nx_) ** 2 + (ydata - ny_) ** 2) ** 0.5
+            if d < best_d and d <= r:
+                best_d = d
+                best = label
+
+        return best
+
+    # ── Context menu ───────────────────────────────────────────────────────
+
+    def _show_context_menu(self, event) -> None:
+        """
+        Constructs and displays a Tkinter context menu at the cursor's location.
+
+        Args:
+            event (matplotlib.backend_bases.MouseEvent): The mouse event that triggered the menu.
+
+        Returns:
+            None
+        """
+        if self.canvas is None or event.inaxes is None or not self._pos:
+            return
+
+        self._dismiss_menu()
+        node_label = self._hit_node(event.xdata, event.ydata)
+
+        menu = tk.Menu(
+            self.master_frame,
+            tearoff=0,
+            bg=_get_color("menu_bg", "#1A2A3D"),
+            fg=_get_color("menu_fg", "#F6F8FB"),
+            activebackground=_get_color("menu_active_bg", "#2F80ED"),
+            activeforeground=_get_color("menu_active_fg", "#FFFFFF"),
+            font=("Segoe UI", 11),
+            bd=0,
+            relief="flat",
+        )
 
         if node_label:
             menu.add_command(
-                label=f"✂  Prune node ({node_label})",
-                command=lambda: self._trigger_prune(node_label)
+                label=f"\u2702  Prune from: {node_label}",
+                command=lambda: self._trigger_prune(node_label),
             )
         else:
-            menu.add_command(label="✂  Prune node (no node selected)", state="disabled")
+            menu.add_command(
+                label="\u2702  Prune  (click on a node)",
+                state="disabled",
+            )
 
         menu.add_separator()
-        menu.add_command(label="↺  Reset tree", command=self._trigger_reset)
+        menu.add_command(label="\u21ba  Reset tree", command=self._trigger_reset)
 
         self._context_menu = menu
-
-        # Convert Matplotlib canvas pixel coords to screen coords
         widget = self.canvas.get_tk_widget()
         root_x = widget.winfo_rootx() + int(event.x)
-        root_y = widget.winfo_rooty() + int(self.fig.bbox.height - event.y)
-
+        root_y = widget.winfo_rooty() + int(widget.winfo_height() - event.y)
         menu.post(root_x, root_y)
 
-    def _trigger_prune(self, node_label):
-        """Invoke the on_prune callback with the selected node label."""
-        if self.on_prune:
-            self.on_prune(node_label)
-
-    def _trigger_reset(self):
-        """Invoke the on_reset callback."""
-        if self.on_reset:
-            self.on_reset()
-
-    def draw_tree(self, tree_obj):
+    def _dismiss_menu(self) -> None:
         """
-        Draw and display a tree structure as a hierarchical graph.
-
-        Converts the tree object to a NetworkX graph, applies hierarchical positioning,
-        colors nodes based on roles (Attacker/Defender), renders edges with dashed style
-        for Defender nodes, and adapts node sizes and text wrapping for labels.
-        Embeds the visualization in the parent frame. Cleans up any previous visualization
-        before rendering the new one. Binds right-click for context menu.
+        Safely destroys the context menu if it is currently open.
 
         Args:
-            tree_obj: A Tree object containing nodes and edges to visualize.
-        """
-        if self.canvas:
-            self.canvas.get_tk_widget().destroy()
-            if self.fig is not None:
-                plt.close(self.fig)
+            None
 
-        G = tree_obj.to_graph()
-
-        self.fig, self.ax = plt.subplots(figsize=(8, 5), dpi=100)
-        self.fig.patch.set_facecolor(TREE_VISUALIZER_PALETTE["bg_dark"])
-        self.ax.set_facecolor(TREE_VISUALIZER_PALETTE["bg_dark"])
-
-        if tree_obj.root is not None:
-            root = tree_obj.root.label
-        else:
-            root = next(iter(G.nodes))
-
-        pos = self.get_hierarchical_pos(G, root)
-        self._pos = pos  # Store for hit-testing
-
-        labels = {}
-        node_sizes = {}
-        for node in tree_obj.nodes:
-            wrapped_label = textwrap.fill(str(node.label), width=15)
-            labels[node.label] = wrapped_label
-            node_sizes[node.label] = max(1000, len(wrapped_label) * 50)
-
-        positioned_nodes = list(pos.keys())
-        G_pos = G.subgraph(positioned_nodes)
-
-        role_map = {}
-        for node in tree_obj.nodes:
-            role_map[node.label] = node.role.strip() if node.role else 'Attacker'
-
-        node_colors = []
-        for node_label in G_pos.nodes():
-            role = role_map.get(node_label, 'Attacker')
-            if role == 'Defender':
-                node_colors.append(TREE_VISUALIZER_PALETTE["defender"])
-            elif role == 'Attacker':
-                node_colors.append(TREE_VISUALIZER_PALETTE["attacker"])
-            else:
-                node_colors.append("#808080")
-
-        solid_edges = []
-        dashed_edges = []
-        for u, v in G_pos.edges():
-            target_role = role_map.get(v, 'Attacker')
-            if target_role == 'Defender':
-                dashed_edges.append((u, v))
-            else:
-                solid_edges.append((u, v))
-
-        nx.draw_networkx_nodes(G_pos, pos, ax=self.ax, node_color=node_colors, node_size=1500)
-        nx.draw_networkx_edges(G_pos, pos, ax=self.ax, edgelist=solid_edges, edge_color='gray', arrows=True)
-        nx.draw_networkx_edges(G_pos, pos, ax=self.ax, edgelist=dashed_edges, edge_color='gray', arrows=True, style='dashed')
-
-        pos_labels = {node: labels[node] for node in positioned_nodes}
-        nx.draw_networkx_labels(G_pos, pos, ax=self.ax, labels=pos_labels, font_size=8, font_color='white')
-
-        self.canvas = FigureCanvasTkAgg(self.fig, master=self.master_frame)
-        self.canvas.draw()
-        self.master_frame.grid_rowconfigure(0, weight=1)
-        self.master_frame.grid_columnconfigure(0, weight=1)
-        self.canvas.get_tk_widget().grid(row=0, column=0, sticky="nsew")
-
-        # Bind right-click for context menu
-        self.fig.canvas.mpl_connect("button_press_event", lambda e: self._show_context_menu(e) if e.button == 3 else None)
-
-    def cleanup(self):
-        """
-        Clean up Matplotlib resources and Tkinter callbacks.
+        Returns:
+            None
         """
         if self._context_menu:
             try:
@@ -248,7 +826,46 @@ class TreeVisualizer:
             except Exception:
                 pass
         self._context_menu = None
-        self._pos = {}
+
+    def _trigger_prune(self, label) -> None:
+        """
+        Triggers the pruning callback associated with the visualizer.
+
+        Args:
+            label (str): The label of the target node to prune from.
+
+        Returns:
+            None
+        """
+        if self.on_prune:
+            self.on_prune(label)
+
+    def _trigger_reset(self) -> None:
+        """
+        Triggers the tree reset callback associated with the visualizer.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
+        if self.on_reset:
+            self.on_reset()
+
+    # ── Internal cleanup ───────────────────────────────────────────────────
+
+    def _cleanup_canvas(self) -> None:
+        """
+        Safely unmounts the canvas and closes the matplotlib figure.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
+        self._dismiss_menu()
 
         if self.canvas:
             try:
@@ -265,3 +882,5 @@ class TreeVisualizer:
         self.canvas = None
         self.fig = None
         self.ax = None
+        self._view_xlim = None
+        self._view_ylim = None

@@ -21,11 +21,7 @@ class PanaceaApp(ctk.CTk):
 
     def __init__(self):
         """
-        Initialize the PANACEA GUI application.
-
-        Sets up the main window, color palette, icons, and UI components including
-        sidebar, tabbed content areas (Home, Tree View, Statistics), and visualization.
-        Initializes the tree visualizer and configures the initial state and console output.
+        Initializes the PANACEA GUI application.
         """
         super().__init__()
 
@@ -33,6 +29,11 @@ class PanaceaApp(ctk.CTk):
         ctk.set_default_color_theme("blue")
 
         self.palette = PALETTE
+        
+        # --- UI DESIGN METRICS ---
+        self.ui_radius = 16      # Main containers, cards, and tabview
+        self.inner_radius = 12   # Large inner elements (textbox, primary action buttons)
+        self.btn_radius = 8      # Small secondary buttons
 
         self.title("PANACEA Desktop GUI")
         self.geometry("1500x800")
@@ -72,9 +73,7 @@ class PanaceaApp(ctk.CTk):
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
     def build_icons(self):
-        """
-        Build and return a dictionary of custom icons used in the GUI.
-        """
+        """Builds a dictionary of custom icons used throughout the GUI."""
         return {
             "upload": self.make_icon("upload", 28),
             "generate": self.make_icon("generate", 28),
@@ -86,9 +85,7 @@ class PanaceaApp(ctk.CTk):
         }
 
     def make_icon(self, kind, size=24):
-        """
-        Generate a custom icon image based on the specified kind and size.
-        """
+        """Generates a custom icon image based on the specified kind and size."""
         img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
         c = self.palette["text"]
@@ -142,9 +139,7 @@ class PanaceaApp(ctk.CTk):
         return ctk.CTkImage(light_image=img, dark_image=img, size=(size, size))
 
     def write_to_console(self, text):
-        """
-        Write a timestamped message to the console textbox.
-        """
+        """Writes a timestamped message to the console textbox."""
         timestamp = time.strftime("%H:%M:%S")
         clean_text = text.rstrip("\n")
 
@@ -161,21 +156,14 @@ class PanaceaApp(ctk.CTk):
         self.textbox.configure(state="disabled")
 
     def clear_console(self):
-        """
-        Clear all text from the console textbox and log the action.
-        """
+        """Clears all text from the console textbox and logs the action."""
         self.textbox.configure(state="normal")
         self.textbox.delete("0.0", "end")
         self.textbox.configure(state="disabled")
         self.write_to_console("Console cleared.")
 
     def clear_file(self):
-        """
-        Clear the currently loaded XML file.
-
-        Resets the file status, disables the convert button, and updates the UI.
-        Also clears the tree visualization and shows the placeholder.
-        """
+        """Clears the currently loaded XML file and resets the UI state."""
         self.current_xml_path = None
         self.current_tree = None
         self.displayed_tree = None
@@ -187,9 +175,7 @@ class PanaceaApp(ctk.CTk):
         self.write_to_console("[INFO] XML file removed by the user.")
 
     def update_file_ui(self, is_loaded: bool, file_name: Optional[str] = None):
-        """
-        Update the file-related UI elements based on whether a file is loaded.
-        """
+        """Updates file-related UI elements based on the current load state."""
         if is_loaded and file_name:
             self.file_status_badge.configure(
                 text="XML ready",
@@ -225,21 +211,14 @@ class PanaceaApp(ctk.CTk):
             self.btn_clear_file.grid_remove()
 
     def on_closing(self):
-        """
-        Handle the window close event.
-        """
+        """Handles the window close event and performs cleanup."""
         self.visualizer.cleanup()
         plt.close('all')
         self.quit()
         self.destroy()
 
     def setup_sidebar(self):
-        """
-        Set up the sidebar UI components.
-
-        Creates and configures the brand card, load button, file status display,
-        time analysis options card, and footer label.
-        """
+        """Sets up the sidebar UI components including brand card and controls."""
         self.setup_brand_card()
         self.setup_load_button()
         self.setup_file_card()
@@ -247,29 +226,26 @@ class PanaceaApp(ctk.CTk):
         self.setup_footer()
 
     def setup_tabs(self):
-        """
-        Set up the tabbed content area with three main sections.
-        """
-        self.tabview = ctk.CTkTabview(self.main_content)
+        """Sets up the tabbed content area holding Home and Tree View sections."""
+        # --- FIX PRINCIPALE: Applico l'ui_radius anche alla TabView ---
+        self.tabview = ctk.CTkTabview(self.main_content, corner_radius=self.ui_radius)
         self.tabview.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
 
         self.tab_home = self.tabview.add("Home")
         self.tab_tree = self.tabview.add("Tree View")
-        # self.tab_stats = self.tabview.add("Statistics") Coming soon
 
         self.tab_home.grid_columnconfigure(0, weight=1)
         self.tab_home.grid_rowconfigure(2, weight=1)
 
         self.setup_home_tab()
         self.setup_tree_view_tab()
-        # self.setup_stats_tab() # Coming soon
 
     def setup_brand_card(self):
-        """Set up the brand card with PANACEA title and description."""
+        """Sets up the brand card with the PANACEA title and description."""
         brand_card = ctk.CTkFrame(
             self.sidebar,
             fg_color=self.palette["card"],
-            corner_radius=24,
+            corner_radius=self.ui_radius,
             border_width=1,
             border_color=self.palette["border"]
         )
@@ -287,33 +263,34 @@ class PanaceaApp(ctk.CTk):
             text="Desktop framework for XML → PRISM conversion",
             font=ctk.CTkFont(size=14),
             text_color=self.palette["muted"],
-            justify="left"
+            justify="left",
+            wraplength=240
         ).pack(anchor="w", padx=20, pady=(0, 18))
 
     def setup_load_button(self):
-        """Set up the load XML button."""
+        """Sets up the 'Import XML file' button in the sidebar."""
         self.btn_load = ctk.CTkButton(
             self.sidebar,
             text="Import XML file",
             image=self.icons["upload"],
             compound="left",
             anchor="w",
-            height=76,
-            corner_radius=22,
+            height=70,
+            corner_radius=self.ui_radius,
             fg_color=self.palette["accent"],
             hover_color=self.palette["accent_hover"],
             text_color=self.palette["text"],
-            font=ctk.CTkFont(size=20, weight="bold"),
+            font=ctk.CTkFont(size=18, weight="bold"),
             command=self.load_xml
         )
         self.btn_load.pack(fill="x", padx=22, pady=(4, 18))
 
     def setup_file_card(self):
-        """Set up the file status display card."""
+        """Sets up the file status display card showing currently loaded XML data."""
         file_card = ctk.CTkFrame(
             self.sidebar,
             fg_color=self.palette["card_2"],
-            corner_radius=22,
+            corner_radius=self.ui_radius,
             border_width=1,
             border_color=self.palette["border"]
         )
@@ -338,9 +315,9 @@ class PanaceaApp(ctk.CTk):
             text="Remove",
             image=self.icons["remove"],
             compound="left",
-            width=100,
-            height=30,
-            corner_radius=8,
+            width=90,
+            height=28,
+            corner_radius=self.btn_radius,
             fg_color="transparent",
             hover_color=self.palette["danger"],
             state="disabled",
@@ -354,7 +331,7 @@ class PanaceaApp(ctk.CTk):
             text="No XML",
             fg_color=self.palette["status_error_bg"],
             text_color=self.palette["status_error_text"],
-            corner_radius=999,
+            corner_radius=999, # Manteniamo la forma a pillola per i badge
             padx=10,
             pady=6,
             font=ctk.CTkFont(size=12, weight="bold")
@@ -364,7 +341,7 @@ class PanaceaApp(ctk.CTk):
         self.file_name_label = ctk.CTkLabel(
             file_card,
             text="Select an XML file from the left column.",
-            wraplength=260,
+            wraplength=250,
             justify="left",
             text_color=self.palette["muted"],
             font=ctk.CTkFont(size=14)
@@ -372,11 +349,11 @@ class PanaceaApp(ctk.CTk):
         self.file_name_label.pack(anchor="w", padx=16, pady=(0, 16))
 
     def setup_time_options_card(self):
-        """Set up the time analysis options card."""
+        """Sets up the time analysis configuration card."""
         time_card = ctk.CTkFrame(
             self.sidebar,
             fg_color=self.palette["card"],
-            corner_radius=22,
+            corner_radius=self.ui_radius,
             border_width=1,
             border_color=self.palette["border"]
         )
@@ -394,7 +371,7 @@ class PanaceaApp(ctk.CTk):
         ctk.CTkLabel(
             time_card,
             text="Enable the time variant of generation for R-ADT models.",
-            wraplength=260,
+            wraplength=250,
             justify="left",
             text_color=self.palette["muted"],
             font=ctk.CTkFont(size=13)
@@ -403,16 +380,17 @@ class PanaceaApp(ctk.CTk):
         self.time_analysis = ctk.CTkCheckBox(
             time_card,
             text="Time Analysis (R-ADT)",
-            font=ctk.CTkFont(size=15, weight="bold"),
+            font=ctk.CTkFont(size=14, weight="bold"),
             text_color=self.palette["text"],
             border_color=self.palette["accent"],
             fg_color=self.palette["accent"],
-            hover_color=self.palette["accent_hover"]
+            hover_color=self.palette["accent_hover"],
+            corner_radius=4 # Angoli leggermente smussati per la checkbox
         )
         self.time_analysis.pack(anchor="w", padx=16, pady=(0, 16))
 
     def setup_footer(self):
-        """Set up the footer label."""
+        """Sets up the footer label with application metadata."""
         footer = ctk.CTkLabel(
             self.sidebar,
             text="Made by Mark8948 in year 2026",
@@ -422,9 +400,7 @@ class PanaceaApp(ctk.CTk):
         footer.pack(side="bottom", pady=20)
 
     def setup_home_tab(self):
-        """
-        Set up the Home tab content area.
-        """
+        """Sets up the Home tab content area including control panels and output console."""
         header = ctk.CTkFrame(self.tab_home, fg_color="transparent")
         header.grid(row=0, column=0, sticky="ew", pady=(0, 18))
         header.grid_columnconfigure(0, weight=1)
@@ -446,7 +422,7 @@ class PanaceaApp(ctk.CTk):
         hero = ctk.CTkFrame(
             self.tab_home,
             fg_color=self.palette["card"],
-            corner_radius=26,
+            corner_radius=self.ui_radius,
             border_width=1,
             border_color=self.palette["border"]
         )
@@ -468,7 +444,8 @@ class PanaceaApp(ctk.CTk):
             left_hero,
             text="The button remains disabled\nuntil you load a valid XML.",
             font=ctk.CTkFont(size=14),
-            text_color=self.palette["muted"]
+            text_color=self.palette["muted"],
+            justify="left"
         ).pack(anchor="w", pady=(6, 14))
 
         self.status_chip = ctk.CTkLabel(
@@ -476,7 +453,7 @@ class PanaceaApp(ctk.CTk):
             text="Waiting for XML file",
             fg_color=self.palette["surface"],
             text_color=self.palette["text"],
-            corner_radius=999,
+            corner_radius=999, # Forma a pillola
             padx=12,
             pady=7,
             font=ctk.CTkFont(size=13, weight="bold")
@@ -488,23 +465,22 @@ class PanaceaApp(ctk.CTk):
             text="Generate PRISM model",
             image=self.icons["generate"],
             compound="left",
-            width=340,
-            height=86,
-            corner_radius=24,
+            width=300,
+            height=70,
+            corner_radius=self.inner_radius,
             fg_color=self.palette["danger"],
             hover_color=self.palette["success"],
             text_color=self.palette["text"],
-            font=ctk.CTkFont(size=22, weight="bold"),
+            font=ctk.CTkFont(size=18, weight="bold"),
             state="disabled",
             command=self.run_panacea
         )
         self.btn_convert.grid(row=0, column=1, padx=22, pady=22, sticky="e")
-        self.btn_convert.configure(text_color=self.palette["text"])
 
         console_card = ctk.CTkFrame(
             self.tab_home,
             fg_color=self.palette["card_2"],
-            corner_radius=26,
+            corner_radius=self.ui_radius,
             border_width=1,
             border_color=self.palette["border"]
         )
@@ -530,15 +506,15 @@ class PanaceaApp(ctk.CTk):
             text="Clear log",
             image=self.icons["clear"],
             compound="left",
-            width=145,
-            height=42,
-            corner_radius=14,
+            width=120,
+            height=32,
+            corner_radius=self.btn_radius,
             fg_color="transparent",
             hover_color=self.palette["button_hover_secondary"],
             border_width=1,
             border_color=self.palette["border"],
             text_color=self.palette["text"],
-            font=ctk.CTkFont(size=14, weight="bold"),
+            font=ctk.CTkFont(size=13, weight="bold"),
             command=self.clear_console
         )
         clear_btn.grid(row=0, column=1, sticky="e")
@@ -549,7 +525,7 @@ class PanaceaApp(ctk.CTk):
             text_color=self.palette["text"],
             border_width=1,
             border_color=self.palette["border"],
-            corner_radius=20,
+            corner_radius=self.inner_radius,
             wrap="word",
             font=ctk.CTkFont(family="Consolas", size=14)
         )
@@ -557,58 +533,46 @@ class PanaceaApp(ctk.CTk):
         self.textbox.configure(state="disabled")
 
     def setup_tree_view_tab(self):
-        """
-        Set up the Tree View tab content area.
-
-        Initializes the TreeVisualizer with right-click context menu callbacks
-        for pruning (on_prune) and resetting (on_reset) the tree directly
-        from the graphical view.
-        """
+        """Sets up the Tree View tab content area."""
         self.tab_tree.grid_columnconfigure(0, weight=1)
-        self.tab_tree.grid_rowconfigure(0, weight=1)
+        self.tab_tree.grid_rowconfigure(0, weight=0)
+        self.tab_tree.grid_rowconfigure(1, weight=1)
+
+        instructions = (
+            "🖱️ Left Click: Pan view   |   "
+            "⚙️ Scroll Wheel: Zoom   |   "
+            "🎯 Ctrl + Left Click: Move Node   |   "
+            "📋 Right Click: Node Menu"
+        )
+        self.instruction_label = ctk.CTkLabel(
+            self.tab_tree,
+            text=instructions,
+            font=ctk.CTkFont(size=13),
+            text_color=self.palette["muted"]
+        )
+        self.instruction_label.grid(row=0, column=0, pady=(10, 0), sticky="ew")
+
+        self.graph_container = ctk.CTkFrame(self.tab_tree, fg_color="transparent")
+        self.graph_container.grid(row=1, column=0, sticky="nsew")
+        self.graph_container.grid_columnconfigure(0, weight=1)
+        self.graph_container.grid_rowconfigure(0, weight=1)
 
         self.tree_placeholder = ctk.CTkLabel(
-            self.tab_tree,
-            text="Please load a valid XML file to visualize the attack-defense tree.\n\nTip: right-click on a node to prune the tree or reset it.",
+            self.graph_container,
+            text="Please load a valid XML file to visualize the attack-defense tree.",
             font=ctk.CTkFont(size=16),
             text_color=self.palette["muted"]
         )
         self.tree_placeholder.grid(row=0, column=0, padx=20, pady=20)
 
         self.visualizer = TreeVisualizer(
-            self.tab_tree,
+            self.graph_container,
             on_prune=self._on_context_prune,
             on_reset=self._on_context_reset
         )
 
-
-    # STATISTICS TAB COMING SOON - DEFINED FUNCION BUT NOT IMPLEMENTED YET
-
-
-    # def setup_stats_tab(self):
-    #     """Set up the Statistics tab content area."""
-    #     self.tab_stats.grid_columnconfigure(0, weight=1)
-    #     self.tab_stats.grid_rowconfigure(0, weight=1)
-
-    #     placeholder = ctk.CTkLabel(
-    #         self.tab_stats,
-    #         text="Statistics and metrics are currently under development.\nComing soon ...",
-    #         font=ctk.CTkFont(size=16),
-    #         text_color=self.palette["muted"]
-    #     )
-    #     placeholder.grid(row=0, column=0, padx=20, pady=20)
-
     def _on_context_prune(self, node_label: str):
-        """
-        Callback invoked when the user selects 'Pota da qui' from the context menu.
-
-        Applies pruning starting from the given node label on the currently displayed
-        tree (or the original if no pruning has been applied yet), updates the visualization,
-        and logs the operation to the console.
-
-        Args:
-            node_label (str): The label of the node to prune from.
-        """
+        """Callback invoked when the user selects 'Prune from here' from the context menu."""
         if not self.current_tree:
             self.write_to_console("[WARNING] No tree loaded.")
             return
@@ -623,11 +587,7 @@ class PanaceaApp(ctk.CTk):
             self.write_to_console(f"[ERROR] Pruning failed: {str(e)}")
 
     def _on_context_reset(self):
-        """
-        Callback invoked when the user selects 'Reimposta albero' from the context menu.
-
-        Resets the visualization to the original unpruned tree and logs the operation.
-        """
+        """Callback invoked when the user selects 'Reset tree' from the context menu."""
         if not self.current_tree:
             self.write_to_console("[WARNING] No tree loaded.")
             return
@@ -637,9 +597,7 @@ class PanaceaApp(ctk.CTk):
         self.write_to_console("[SUCCESS] Tree reset to original.")
 
     def load_xml(self):
-        """
-        Open a file dialog to select and load an XML file.
-        """
+        """Opens a file dialog to select and load an XML file."""
         file_path = filedialog.askopenfilename(filetypes=[("XML files", "*.xml")])
 
         if file_path:
@@ -653,8 +611,9 @@ class PanaceaApp(ctk.CTk):
                 self.displayed_tree = None
 
                 self.write_to_console("[VISUALIZATION] Rendering tree in Tree View tab...")
-                self.visualizer.draw_tree(self.current_tree)
+            
                 self.tree_placeholder.grid_remove()
+                self.visualizer.draw_tree(self.current_tree)
 
                 self.update_file_ui(True, file_name)
                 self.write_to_console("[SUCCESS] Tree visualization complete.")
@@ -667,9 +626,7 @@ class PanaceaApp(ctk.CTk):
                 self.update_file_ui(False)
 
     def run_panacea(self):
-        """
-        Execute the PANACEA conversion process.
-        """
+        """Executes the PANACEA conversion process."""
         if not self.current_xml_path:
             return
 
