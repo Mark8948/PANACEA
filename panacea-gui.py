@@ -186,7 +186,7 @@ class PanaceaApp(ctk.CTk):
         self.update_file_ui(False)
         self.write_to_console("[INFO] XML file removed by the user.")
 
-    def update_file_ui(self, is_loaded: bool, file_name: str = None):
+    def update_file_ui(self, is_loaded: bool, file_name: Optional[str] = None):
         """
         Update the file-related UI elements based on whether a file is loaded.
         """
