@@ -227,18 +227,20 @@ class PanaceaApp(ctk.CTk):
 
     def setup_tabs(self):
         """Sets up the tabbed content area holding Home and Tree View sections."""
-        # --- FIX PRINCIPALE: Applico l'ui_radius anche alla TabView ---
+
         self.tabview = ctk.CTkTabview(self.main_content, corner_radius=self.ui_radius)
         self.tabview.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
 
         self.tab_home = self.tabview.add("Home")
         self.tab_tree = self.tabview.add("Tree View")
+        self.tab_stats = self.tabview.add("Statistics")
 
         self.tab_home.grid_columnconfigure(0, weight=1)
         self.tab_home.grid_rowconfigure(2, weight=1)
 
         self.setup_home_tab()
         self.setup_tree_view_tab()
+        self.setup_stats_tab()
 
     def setup_brand_card(self):
         """Sets up the brand card with the PANACEA title and description."""
@@ -570,6 +572,19 @@ class PanaceaApp(ctk.CTk):
             on_prune=self._on_context_prune,
             on_reset=self._on_context_reset
         )
+
+    def setup_stats_tab(self):
+        """Set up the Statistics tab content area."""
+        self.tab_stats.grid_columnconfigure(0, weight=1)
+        self.tab_stats.grid_rowconfigure(0, weight=1)
+
+        placeholder = ctk.CTkLabel(
+            self.tab_stats,
+            text="Statistics and metrics are currently under development.\nComing soon ...",
+            font=ctk.CTkFont(size=16),
+            text_color=self.palette["muted"]
+        )
+        placeholder.grid(row=0, column=0, padx=20, pady=20)
 
     def _on_context_prune(self, node_label: str):
         """Callback invoked when the user selects 'Prune from here' from the context menu."""
