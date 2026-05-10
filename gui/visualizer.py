@@ -90,7 +90,7 @@ class TreeVisualizer:
         Right-click           — context menu (Prune / Reset)
     """
 
-    def __init__(self, master_frame, on_prune=None, on_reset=None):
+    def __init__(self, master_frame, on_prune=None, on_reset=None, on_edit=None):
         """
         Initializes the TreeVisualizer instance.
 
@@ -98,13 +98,14 @@ class TreeVisualizer:
             master_frame (tk.Frame): The parent Tkinter/CustomTkinter frame.
             on_prune (callable, optional): Callback triggered when a node is pruned.
             on_reset (callable, optional): Callback triggered when the tree is reset.
-
+            on_edit (callable, optional): Callback triggered when a node is edited.
         Returns:
             None
         """
         self.master_frame = master_frame
         self.on_prune = on_prune
         self.on_reset = on_reset
+        self.on_edit = on_edit
 
         self.canvas: Optional[FigureCanvasTkAgg] = None
         self.fig: Optional[Figure] = None
@@ -763,15 +764,7 @@ class TreeVisualizer:
     # ── Context menu ───────────────────────────────────────────────────────
 
     def _show_context_menu(self, event) -> None:
-        """
-        Constructs and displays a Tkinter context menu at the cursor's location.
-
-        Args:
-            event (matplotlib.backend_bases.MouseEvent): The mouse event that triggered the menu.
-
-        Returns:
-            None
-        """
+        """Constructs and displays a Tkinter context menu at the cursor's location."""
         if self.canvas is None or event.inaxes is None or not self._pos:
             return
 
@@ -791,15 +784,18 @@ class TreeVisualizer:
         )
 
         if node_label:
+            # NUOVO COMANDO MODIFICA
             menu.add_command(
-                label=f"\u2702  Prune from: {node_label}",
+                label=f"\u270E  Modifica Parametri: {node_label}",
+                command=lambda: self._trigger_edit(node_label),
+            )
+            menu.add_command(
+                label=f"\u2702  Pota da: {node_label}",
                 command=lambda: self._trigger_prune(node_label),
             )
         else:
-            menu.add_command(
-                label="\u2702  Prune  (click on a node)",
-                state="disabled",
-            )
+            menu.add_command(label="\u270E  Modifica (clicca un nodo)", state="disabled")
+            menu.add_command(label="\u2702  Pota (clicca un nodo)", state="disabled")
 
         menu.add_separator()
         menu.add_command(label="\u21ba  Reset tree", command=self._trigger_reset)
@@ -852,6 +848,13 @@ class TreeVisualizer:
         """
         if self.on_reset:
             self.on_reset()
+
+    def _trigger_edit(self, label) -> None:
+        """Triggers the edit callback associated with the visualizer."""
+        if self.on_edit:
+            self.on_edit(label)
+    
+
 
     # ── Internal cleanup ───────────────────────────────────────────────────
 
