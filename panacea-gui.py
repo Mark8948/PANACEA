@@ -227,18 +227,20 @@ class PanaceaApp(ctk.CTk):
 
     def setup_tabs(self):
         """Sets up the tabbed content area holding Home and Tree View sections."""
-        # --- FIX PRINCIPALE: Applico l'ui_radius anche alla TabView ---
+
         self.tabview = ctk.CTkTabview(self.main_content, corner_radius=self.ui_radius)
         self.tabview.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
 
         self.tab_home = self.tabview.add("Home")
         self.tab_tree = self.tabview.add("Tree View")
+        self.tab_stats = self.tabview.add("Statistics")
 
         self.tab_home.grid_columnconfigure(0, weight=1)
         self.tab_home.grid_rowconfigure(2, weight=1)
 
         self.setup_home_tab()
         self.setup_tree_view_tab()
+        self.setup_stats_tab()
 
     def setup_brand_card(self):
         """Sets up the brand card with the PANACEA title and description."""
@@ -568,8 +570,22 @@ class PanaceaApp(ctk.CTk):
         self.visualizer = TreeVisualizer(
             self.graph_container,
             on_prune=self._on_context_prune,
-            on_reset=self._on_context_reset
+            on_reset=self._on_context_reset,
+            on_edit=self._on_context_edit
         )
+
+    def setup_stats_tab(self):
+        """Set up the Statistics tab content area."""
+        self.tab_stats.grid_columnconfigure(0, weight=1)
+        self.tab_stats.grid_rowconfigure(0, weight=1)
+
+        placeholder = ctk.CTkLabel(
+            self.tab_stats,
+            text="Statistics and metrics are currently under development.\nComing soon ...",
+            font=ctk.CTkFont(size=16),
+            text_color=self.palette["muted"]
+        )
+        placeholder.grid(row=0, column=0, padx=20, pady=20)
 
     def _on_context_prune(self, node_label: str):
         """Callback invoked when the user selects 'Prune from here' from the context menu."""
@@ -624,6 +640,83 @@ class PanaceaApp(ctk.CTk):
                 self.current_tree = None
                 self.tree_placeholder.grid()
                 self.update_file_ui(False)
+
+
+    def _on_context_edit(self, node_label: str):
+        """
+        Apre una finestra modale per modificare Costo e Tempo del nodo selezionato.
+        Aggiorna l'oggetto in memoria in tempo reale.
+        """
+        if not self.current_tree:
+            self.write_to_console("[WARNING] No tree loaded.")
+            return
+
+        # Capiamo su quale albero stiamo lavorando (originale o potato)
+        tree_to_edit = self.displayed_tree if self.displayed_tree else self.current_tree
+        node = tree_to_edit.get_node(node_label)
+        
+        if not node:
+            self.write_to_console(f"[ERROR] Node '{node_label}' not found.")
+            return
+
+        # Creazione della finestra modale
+        edit_win = ctk.CTkToplevel(self)
+        edit_win.title(f"Editor Nodo: {node_label}")
+        edit_win.geometry("350x300")
+        edit_win.configure(fg_color=self.palette["card"])
+        edit_win.attributes("-topmost", True) # Mantieni sopra tutto
+        edit_win.grab_set() # Rende la finestra MODALE (blocca l'app finché non si chiude)
+        edit_win.resizable(False, False)
+
+        # Header
+        ctk.CTkLabel(
+            edit_win, 
+            text=f"Parametri per: {node_label}", 
+            font=ctk.CTkFont(size=18, weight="bold"),
+            text_color=self.palette["text"]
+        ).pack(pady=(20, 20))
+
+        # --- Riga Costo ---
+        cost_frame = ctk.CTkFrame(edit_win, fg_color="transparent")
+        cost_frame.pack(fill="x", padx=40, pady=10)
+        ctk.CTkLabel(cost_frame, text="Costo:", font=ctk.CTkFont(size=15)).pack(side="left")
+        cost_entry = ctk.CTkEntry(cost_frame, width=120)
+        cost_entry.pack(side="right")
+        cost_entry.insert(0, str(node.cost))
+
+        # --- Riga Tempo ---
+        time_frame = ctk.CTkFrame(edit_win, fg_color="transparent")
+        time_frame.pack(fill="x", padx=40, pady=10)
+        ctk.CTkLabel(time_frame, text="Tempo:", font=ctk.CTkFont(size=15)).pack(side="left")
+        time_entry = ctk.CTkEntry(time_frame, width=120)
+        time_entry.pack(side="right")
+        time_entry.insert(0, str(node.time))
+
+        def save_changes():
+            """Salva i nuovi valori in memoria e chiude la finestra"""
+            new_cost = cost_entry.get().strip()
+            new_time = time_entry.get().strip()
+            
+            # Aggiornamento dell'oggetto Node in RAM
+            node.cost = new_cost
+            node.time = new_time
+            
+            self.write_to_console(f"[EDIT] Nodo '{node_label}' -> Costo: {new_cost} | Tempo: {new_time}")
+            
+            # Distruggi il popup e sblocca l'interfaccia
+            edit_win.grab_release()
+            edit_win.destroy()
+
+        # --- Bottone Salva ---
+        ctk.CTkButton(
+            edit_win, 
+            text="Salva Modifiche", 
+            fg_color=self.palette["success"],
+            hover_color="#1E8449",
+            font=ctk.CTkFont(size=15, weight="bold"),
+            command=save_changes
+        ).pack(pady=(30, 10))
+
 
     def run_panacea(self):
         """Executes the PANACEA conversion process."""
