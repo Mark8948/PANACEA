@@ -5,11 +5,14 @@ import time
 from PIL import Image, ImageDraw
 from typing import Optional
 import matplotlib.pyplot as plt
-from gui.visualizer import TreeVisualizer
-from gui.palette import PALETTE
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import subprocess
 import re
+import tempfile
 
+from gui.visualizer import TreeVisualizer
+from gui.palette import PALETTE
 import tree_to_prism as tp
 
 
@@ -45,6 +48,12 @@ class PanaceaApp(ctk.CTk):
         self.current_xml_path: Optional[str] = None
         self.current_tree = None
         self.displayed_tree = None
+        
+        # --- ANALYSIS TRACKING ---
+        self.run_history = []               # Stores tuples: (Modification Label, Result Value)
+        self.pending_modifications = []     # Tracks actions performed since last run
+        self.tree_modified = False
+
         self.icons = self.build_icons()
 
         self.grid_columnconfigure(0, weight=0)
@@ -169,11 +178,14 @@ class PanaceaApp(ctk.CTk):
         self.current_xml_path = None
         self.current_tree = None
         self.displayed_tree = None
+        self.tree_modified = False
+        self.pending_modifications.clear()
 
         self.visualizer.cleanup()
         self.tree_placeholder.grid()
 
         self.update_file_ui(False)
+        self._update_stats_button_state()
         self.write_to_console("[INFO] XML file removed by the user.")
 
     def update_file_ui(self, is_loaded: bool, file_name: Optional[str] = None):
@@ -335,7 +347,7 @@ class PanaceaApp(ctk.CTk):
             text="No XML",
             fg_color=self.palette["status_error_bg"],
             text_color=self.palette["status_error_text"],
-            corner_radius=999, # Manteniamo la forma a pillola per i badge
+            corner_radius=999,
             padx=10,
             pady=6,
             font=ctk.CTkFont(size=12, weight="bold")
@@ -389,7 +401,7 @@ class PanaceaApp(ctk.CTk):
             border_color=self.palette["accent"],
             fg_color=self.palette["accent"],
             hover_color=self.palette["accent_hover"],
-            corner_radius=4 # Angoli leggermente smussati per la checkbox
+            corner_radius=4
         )
         self.time_analysis.pack(anchor="w", padx=16, pady=(0, 16))
 
@@ -457,7 +469,7 @@ class PanaceaApp(ctk.CTk):
             text="Waiting for XML file",
             fg_color=self.palette["surface"],
             text_color=self.palette["text"],
-            corner_radius=999, # Forma a pillola
+            corner_radius=999,
             padx=12,
             pady=7,
             font=ctk.CTkFont(size=13, weight="bold")
@@ -577,17 +589,154 @@ class PanaceaApp(ctk.CTk):
         )
 
     def setup_stats_tab(self):
-        """Set up the Statistics tab content area."""
-        self.tab_stats.grid_columnconfigure(0, weight=1)
+        """Sets up the Statistics tab content area with run controls and live plotting."""
+        self.tab_stats.grid_columnconfigure(0, weight=0)
+        self.tab_stats.grid_columnconfigure(1, weight=1)
         self.tab_stats.grid_rowconfigure(0, weight=1)
 
-        placeholder = ctk.CTkLabel(
-            self.tab_stats,
-            text="Statistics and metrics are currently under development.\nComing soon ...",
-            font=ctk.CTkFont(size=16),
-            text_color=self.palette["muted"]
+        # Left panel for controls
+        ctrl_frame = ctk.CTkFrame(self.tab_stats, fg_color="transparent")
+        ctrl_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 20), pady=10)
+
+        ctk.CTkLabel(
+            ctrl_frame,
+            text="Analysis Dashboard",
+            font=ctk.CTkFont(size=20, weight="bold"),
+            text_color=self.palette["text"]
+        ).pack(anchor="w", pady=(0, 10))
+
+        ctk.CTkLabel(
+            ctrl_frame,
+            text="Run PRISM directly on the\ncurrent in-memory tree.\nModify values in Tree View\nto enable new runs.",
+            font=ctk.CTkFont(size=13),
+            text_color=self.palette["muted"],
+            justify="left"
+        ).pack(anchor="w", pady=(0, 20))
+
+        self.btn_run_stats = ctk.CTkButton(
+            ctrl_frame,
+            text="Run PRISM Analysis",
+            image=self.icons["generate"],
+            compound="left",
+            height=50,
+            corner_radius=self.btn_radius,
+            fg_color=self.palette["surface"],
+            text_color=self.palette["muted"],
+            state="disabled",
+            command=self.run_stats_analysis
         )
-        placeholder.grid(row=0, column=0, padx=20, pady=20)
+        self.btn_run_stats.pack(fill="x", pady=(0, 20))
+
+        # Clear History Button
+        self.btn_clear_history = ctk.CTkButton(
+            ctrl_frame,
+            text="Clear Plot History",
+            image=self.icons["clear"],
+            compound="left",
+            height=32,
+            corner_radius=self.btn_radius,
+            fg_color="transparent",
+            hover_color=self.palette["danger"],
+            border_width=1,
+            border_color=self.palette["border"],
+            text_color=self.palette["text"],
+            command=self._clear_stats_history
+        )
+        self.btn_clear_history.pack(fill="x")
+
+        # Right panel for Plot
+        self.plot_frame = ctk.CTkFrame(
+            self.tab_stats,
+            fg_color=self.palette["card"],
+            corner_radius=self.ui_radius,
+            border_width=1,
+            border_color=self.palette["border"]
+        )
+        self.plot_frame.grid(row=0, column=1, sticky="nsew", pady=10)
+
+        # Matplotlib Figure Setup
+        self.stats_fig = Figure(figsize=(8, 5), dpi=100)
+        self.stats_ax = self.stats_fig.add_subplot(111)
+        self.stats_fig.patch.set_facecolor(self.palette["card"])
+        self.stats_ax.set_facecolor(self.palette["card"])
+
+        # Style the axes
+        self.stats_ax.tick_params(colors=self.palette["text"])
+        self.stats_ax.xaxis.label.set_color(self.palette["text"])
+        self.stats_ax.yaxis.label.set_color(self.palette["text"])
+        for spine in self.stats_ax.spines.values():
+            spine.set_color(self.palette["border"])
+
+        self.stats_canvas = FigureCanvasTkAgg(self.stats_fig, master=self.plot_frame)
+        self.stats_canvas.get_tk_widget().pack(fill="both", expand=True, padx=10, pady=10)
+
+        self._update_stats_plot()
+
+    def _update_stats_button_state(self):
+        """Enables or disables the run button based on tree modifications."""
+        if self.current_tree and self.tree_modified:
+            self.btn_run_stats.configure(state="normal", fg_color=self.palette["success"], text_color="#FFFFFF")
+        else:
+            self.btn_run_stats.configure(state="disabled", fg_color=self.palette["surface"], text_color=self.palette["muted"])
+
+    def _clear_stats_history(self):
+        """Clears the analysis history and resets the plot."""
+        self.run_history.clear()
+        self.pending_modifications.clear()
+        self._update_stats_plot()
+        self.write_to_console("[STATS] Plot history cleared.")
+        self._update_stats_button_state()
+
+    def _update_stats_plot(self):
+        """Redraws the Matplotlib plot with the current analysis history."""
+        self.stats_ax.cla()
+        self.stats_ax.set_facecolor(self.palette["card"])
+
+        if not self.run_history:
+            self.stats_ax.text(0.5, 0.5, "No data to display.\nModify the tree and run an analysis to generate the plot.",
+                               ha='center', va='center', color=self.palette["muted"], fontsize=12)
+            self.stats_ax.set_xticks([])
+            self.stats_ax.set_yticks([])
+            self.stats_fig.subplots_adjust(bottom=0.1) # Default layout
+        else:
+            labels = [item[0] for item in self.run_history]
+            values = [item[1] for item in self.run_history]
+            x_pos = list(range(len(values)))
+
+            # Draw the evolution line and points
+            self.stats_ax.plot(x_pos, values, marker='o', linestyle='-', color=self.palette["accent"], linewidth=2, markersize=8)
+            
+            # Annotate exact numerical values on top of points
+            for i, v in enumerate(values):
+                self.stats_ax.annotate(f"{v:.2f}", (x_pos[i], values[i]), textcoords="offset points", 
+                                       xytext=(0,10), ha='center', color=self.palette["text"], 
+                                       fontsize=10, fontweight='bold')
+
+            self.stats_ax.set_title("Cost / Reward Evolution", color=self.palette["text"], fontsize=14, pad=15)
+            self.stats_ax.set_ylabel("Computed Result", color=self.palette["text"], fontsize=11)
+            
+            # Setup custom X-axis labels (showing exact modification)
+            self.stats_ax.set_xticks(x_pos)
+            self.stats_ax.set_xticklabels(labels, rotation=0, ha="center", color=self.palette["text"], fontsize=9)
+            
+            # Adjust the figure layout to accommodate multiline labels
+            self.stats_fig.subplots_adjust(bottom=0.15 + (0.05 if len(self.run_history) > 4 else 0.0))
+            
+            # Adaptive Y-axis bounds to prevent text clipping
+            y_min, y_max = min(values), max(values)
+            y_range = y_max - y_min
+            if y_range == 0:
+                self.stats_ax.set_ylim(y_min - 10, y_max + 10)
+            else:
+                self.stats_ax.set_ylim(y_min - y_range * 0.1, y_max + y_range * 0.2)
+                
+            # Handle single point scaling specifically
+            if len(values) == 1:
+                self.stats_ax.set_xlim(-0.5, 0.5)
+
+            self.stats_ax.grid(True, linestyle='--', alpha=0.3, color=self.palette["border"])
+
+        self.stats_canvas.draw()
 
     def _on_context_prune(self, node_label: str):
         """Callback invoked when the user selects 'Prune from here' from the context menu."""
@@ -600,6 +749,12 @@ class PanaceaApp(ctk.CTk):
             pruned_tree = tree_to_prune.prune(node_label)
             self.displayed_tree = pruned_tree
             self.visualizer.draw_tree(pruned_tree)
+            
+            # Analytics Tracking
+            self.pending_modifications.append(f"Prune: {node_label}")
+            self.tree_modified = True
+            self._update_stats_button_state()
+            
             self.write_to_console("[SUCCESS] Pruned tree displayed. Right-click again to prune further.")
         except Exception as e:
             self.write_to_console(f"[ERROR] Pruning failed: {str(e)}")
@@ -612,6 +767,12 @@ class PanaceaApp(ctk.CTk):
         self.displayed_tree = None
         self.write_to_console("[RESET] Displaying original tree...")
         self.visualizer.draw_tree(self.current_tree)
+        
+        # Analytics Tracking
+        self.pending_modifications.append("Reset to Original")
+        self.tree_modified = True
+        self._update_stats_button_state()
+        
         self.write_to_console("[SUCCESS] Tree reset to original.")
 
     def load_xml(self):
@@ -634,6 +795,12 @@ class PanaceaApp(ctk.CTk):
                 self.visualizer.draw_tree(self.current_tree)
 
                 self.update_file_ui(True, file_name)
+                
+                # Analytics Tracking Initial State
+                self.pending_modifications = ["Initial Load"]
+                self.tree_modified = True
+                self._update_stats_button_state()
+                
                 self.write_to_console("[SUCCESS] Tree visualization complete.")
 
             except Exception as e:
@@ -647,15 +814,11 @@ class PanaceaApp(ctk.CTk):
         """
         Opens a modal window to edit the Cost and Time of the selected node.
         Updates the node object in memory in real-time.
-        
-        Args:
-            node_label (str): The label of the node to be edited.
         """
         if not self.current_tree:
             self.write_to_console("[WARNING] No tree loaded.")
             return
 
-        # Determine which tree we are working on (original or pruned)
         tree_to_edit = self.displayed_tree if self.displayed_tree else self.current_tree
         node = tree_to_edit.get_node(node_label)
         
@@ -663,16 +826,14 @@ class PanaceaApp(ctk.CTk):
             self.write_to_console(f"[ERROR] Node '{node_label}' not found.")
             return
 
-        # Create modal window
         edit_win = ctk.CTkToplevel(self)
         edit_win.title(f"Node Editor: {node_label}")
         edit_win.geometry("350x300")
         edit_win.configure(fg_color=self.palette["card"])
-        edit_win.attributes("-topmost", True) # Keep on top
-        edit_win.grab_set() # Make the window MODAL (blocks the app until closed)
+        edit_win.attributes("-topmost", True)
+        edit_win.grab_set()
         edit_win.resizable(False, False)
 
-        # Header
         ctk.CTkLabel(
             edit_win, 
             text=f"Parameters for: {node_label}", 
@@ -680,7 +841,6 @@ class PanaceaApp(ctk.CTk):
             text_color=self.palette["text"]
         ).pack(pady=(20, 20))
 
-        # --- Cost Row ---
         cost_frame = ctk.CTkFrame(edit_win, fg_color="transparent")
         cost_frame.pack(fill="x", padx=40, pady=10)
         ctk.CTkLabel(cost_frame, text="Cost:", font=ctk.CTkFont(size=15)).pack(side="left")
@@ -688,7 +848,6 @@ class PanaceaApp(ctk.CTk):
         cost_entry.pack(side="right")
         cost_entry.insert(0, str(node.cost))
 
-        # --- Time Row ---
         time_frame = ctk.CTkFrame(edit_win, fg_color="transparent")
         time_frame.pack(fill="x", padx=40, pady=10)
         ctk.CTkLabel(time_frame, text="Time:", font=ctk.CTkFont(size=15)).pack(side="left")
@@ -697,21 +856,23 @@ class PanaceaApp(ctk.CTk):
         time_entry.insert(0, str(node.time))
 
         def save_changes():
-            """Saves the new values to memory and closes the window."""
+            """Saves the new values to memory and registers the modification."""
             new_cost = cost_entry.get().strip()
             new_time = time_entry.get().strip()
             
-            # Update Node object in RAM
             node.cost = new_cost
             node.time = new_time
             
             self.write_to_console(f"[EDIT] Node '{node_label}' -> Cost: {new_cost} | Time: {new_time}")
             
-            # Destroy the popup and unlock the interface
+            # Analytics Tracking: Register edit action
+            self.pending_modifications.append(f"Edit: {node_label}")
+            self.tree_modified = True
+            self._update_stats_button_state()
+            
             edit_win.grab_release()
             edit_win.destroy()
 
-        # --- Save Button ---
         ctk.CTkButton(
             edit_win, 
             text="Save Changes", 
@@ -721,63 +882,120 @@ class PanaceaApp(ctk.CTk):
             command=save_changes
         ).pack(pady=(30, 10))
 
-    def _execute_prism(self, model_path: str, props_path: str):
+    def _execute_prism(self, model_path: str, props_path: str, silent: bool = False) -> Optional[float]:
         """
         Executes the PRISM model checker in a background subprocess.
-        
-        This method launches the PRISM command-line tool, captures its output,
-        and parses the final result (Probability or Reward) using regular expressions.
-        The result is then displayed in the GUI console.
-
-        Args:
-            model_path (str): The absolute path to the generated .prism file.
-            props_path (str): The absolute path to the generated .props file.
         """
-        self.write_to_console("[PROCESS] Launching PRISM engine in background...")
+        if not silent:
+            self.write_to_console("[PROCESS] Launching PRISM engine in background...")
         
         try:
-            # Building the command. Ensure PRISM is in your PATH.
             command = ["prism", model_path, props_path]
             
-            # Start the process in headless mode
             process = subprocess.Popen(
                 command,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                shell=True # Recommended on Windows for executing batch files like prism.bat
+                shell=True
             )
             
             stdout, stderr = process.communicate()
             
             if process.returncode != 0:
                 self.write_to_console(f"[ERROR] PRISM execution failed:\n{stderr}")
-                return
+                return None
 
-            # Parsing logic: PRISM results usually follow "Result: [value]"
             match = re.search(r"Result:\s*([\d\.]+)", stdout)
             
             if match:
-                result_value = match.group(1)
-                self.write_to_console("--- ANALYSIS RESULT ---")
-                self.write_to_console(f"Computed Value: {result_value}")
-                self.write_to_console("-----------------------")
+                result_value = float(match.group(1))
+                if not silent:
+                    self.write_to_console("--- ANALYSIS RESULT ---")
+                    self.write_to_console(f"Computed Value: {result_value}")
+                    self.write_to_console("-----------------------")
+                return result_value
             else:
                 self.write_to_console("[WARNING] Could not parse the final result from PRISM output.")
-                self.write_to_console("Check the terminal output structure for verification.")
+                if not silent:
+                    self.write_to_console("Check the terminal output structure for verification.")
+                return None
 
         except FileNotFoundError:
             self.write_to_console("[CRITICAL] PRISM executable not found. Ensure it is added to the system PATH.")
+            return None
         except Exception as e:
             self.write_to_console(f"[CRITICAL] Subprocess error: {str(e)}")
+            return None
+
+    def run_stats_analysis(self):
+        """
+        Executes a background PRISM analysis specifically for the statistics tab.
+        Evaluates current tree state and logs it to the visual plot.
+        """
+        if not self.tree_modified or not self.current_tree:
+            return
+
+        self.write_to_console("--- STATS ANALYSIS STARTED ---")
+        self.write_to_console("[STATS] Generating temporary PRISM files...")
+
+        # Lock the button to prevent duplicate runs
+        self.tree_modified = False
+        self._update_stats_button_state()
+
+        tree_to_run = self.displayed_tree if self.displayed_tree else self.current_tree
+        use_time = self.time_analysis.get() == 1
+
+        try:
+            if use_time:
+                prism_model = tp.get_prism_model_time(tree_to_run)
+            else:
+                prism_model = tp.get_prism_model(tree_to_run)
+
+            temp_dir = tempfile.gettempdir()
+            temp_prism = os.path.join(temp_dir, "panacea_temp.prism")
+            temp_props = os.path.join(temp_dir, "panacea_temp.props")
+
+            tp.save_prism_model(prism_model, temp_prism)
+            tp.save_prism_properties(temp_props)
+
+            self.write_to_console("[STATS] Executing PRISM engine...")
+            
+            result = self._execute_prism(temp_prism, temp_props, silent=True)
+
+            if result is not None:
+                # Compile label based on what the user changed
+                if not self.pending_modifications:
+                    mod_label = "Unknown State"
+                elif len(self.pending_modifications) == 1:
+                    mod_label = self.pending_modifications[0]
+                else:
+                    mod_label = f"{len(self.pending_modifications)} edits applied"
+                
+                run_id = len(self.run_history) + 1
+                x_label = f"Run {run_id}\n({mod_label})"
+
+                # Add to memory and update plot
+                self.run_history.append((x_label, result))
+                self.pending_modifications.clear()
+                
+                self._update_stats_plot()
+                self.write_to_console(f"[SUCCESS] Run {run_id} completed. Result: {result}")
+            else:
+                self.write_to_console("[ERROR] Could not extract result from PRISM output.")
+                self.tree_modified = True # Unlock so user can retry
+                self._update_stats_button_state()
+
+        except Exception as e:
+            self.write_to_console(f"[CRITICAL] Analysis failed: {str(e)}")
+            self.tree_modified = True
+            self._update_stats_button_state()
+
+        self.write_to_console("--- STATS ANALYSIS COMPLETED ---")
 
     def run_panacea(self):
         """
         Executes the PANACEA conversion process and triggers PRISM model checking.
-        
-        This method coordinates the data extraction from the R-ADT tree, 
-        saves the PRISM files, and automatically starts the background 
-        verification engine.
         """
         if not self.current_xml_path:
             return
@@ -825,7 +1043,6 @@ class PanaceaApp(ctk.CTk):
             self.write_to_console(f"[SUCCESS] PRISM properties saved to: {os.path.basename(props_path)}")
             self.write_to_console("--- GENERATION COMPLETED ---")
             
-            # Phase 2: Execute PRISM engine automatically
             self._execute_prism(output_path, props_path)
 
         except Exception as e:
