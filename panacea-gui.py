@@ -7,6 +7,8 @@ from typing import Optional
 import matplotlib.pyplot as plt
 from gui.visualizer import TreeVisualizer
 from gui.palette import PALETTE
+import subprocess
+import re
 
 import tree_to_prism as tp
 
@@ -641,17 +643,19 @@ class PanaceaApp(ctk.CTk):
                 self.tree_placeholder.grid()
                 self.update_file_ui(False)
 
-
     def _on_context_edit(self, node_label: str):
         """
-        Apre una finestra modale per modificare Costo e Tempo del nodo selezionato.
-        Aggiorna l'oggetto in memoria in tempo reale.
+        Opens a modal window to edit the Cost and Time of the selected node.
+        Updates the node object in memory in real-time.
+        
+        Args:
+            node_label (str): The label of the node to be edited.
         """
         if not self.current_tree:
             self.write_to_console("[WARNING] No tree loaded.")
             return
 
-        # Capiamo su quale albero stiamo lavorando (originale o potato)
+        # Determine which tree we are working on (original or pruned)
         tree_to_edit = self.displayed_tree if self.displayed_tree else self.current_tree
         node = tree_to_edit.get_node(node_label)
         
@@ -659,67 +663,122 @@ class PanaceaApp(ctk.CTk):
             self.write_to_console(f"[ERROR] Node '{node_label}' not found.")
             return
 
-        # Creazione della finestra modale
+        # Create modal window
         edit_win = ctk.CTkToplevel(self)
-        edit_win.title(f"Editor Nodo: {node_label}")
+        edit_win.title(f"Node Editor: {node_label}")
         edit_win.geometry("350x300")
         edit_win.configure(fg_color=self.palette["card"])
-        edit_win.attributes("-topmost", True) # Mantieni sopra tutto
-        edit_win.grab_set() # Rende la finestra MODALE (blocca l'app finché non si chiude)
+        edit_win.attributes("-topmost", True) # Keep on top
+        edit_win.grab_set() # Make the window MODAL (blocks the app until closed)
         edit_win.resizable(False, False)
 
         # Header
         ctk.CTkLabel(
             edit_win, 
-            text=f"Parametri per: {node_label}", 
+            text=f"Parameters for: {node_label}", 
             font=ctk.CTkFont(size=18, weight="bold"),
             text_color=self.palette["text"]
         ).pack(pady=(20, 20))
 
-        # --- Riga Costo ---
+        # --- Cost Row ---
         cost_frame = ctk.CTkFrame(edit_win, fg_color="transparent")
         cost_frame.pack(fill="x", padx=40, pady=10)
-        ctk.CTkLabel(cost_frame, text="Costo:", font=ctk.CTkFont(size=15)).pack(side="left")
+        ctk.CTkLabel(cost_frame, text="Cost:", font=ctk.CTkFont(size=15)).pack(side="left")
         cost_entry = ctk.CTkEntry(cost_frame, width=120)
         cost_entry.pack(side="right")
         cost_entry.insert(0, str(node.cost))
 
-        # --- Riga Tempo ---
+        # --- Time Row ---
         time_frame = ctk.CTkFrame(edit_win, fg_color="transparent")
         time_frame.pack(fill="x", padx=40, pady=10)
-        ctk.CTkLabel(time_frame, text="Tempo:", font=ctk.CTkFont(size=15)).pack(side="left")
+        ctk.CTkLabel(time_frame, text="Time:", font=ctk.CTkFont(size=15)).pack(side="left")
         time_entry = ctk.CTkEntry(time_frame, width=120)
         time_entry.pack(side="right")
         time_entry.insert(0, str(node.time))
 
         def save_changes():
-            """Salva i nuovi valori in memoria e chiude la finestra"""
+            """Saves the new values to memory and closes the window."""
             new_cost = cost_entry.get().strip()
             new_time = time_entry.get().strip()
             
-            # Aggiornamento dell'oggetto Node in RAM
+            # Update Node object in RAM
             node.cost = new_cost
             node.time = new_time
             
-            self.write_to_console(f"[EDIT] Nodo '{node_label}' -> Costo: {new_cost} | Tempo: {new_time}")
+            self.write_to_console(f"[EDIT] Node '{node_label}' -> Cost: {new_cost} | Time: {new_time}")
             
-            # Distruggi il popup e sblocca l'interfaccia
+            # Destroy the popup and unlock the interface
             edit_win.grab_release()
             edit_win.destroy()
 
-        # --- Bottone Salva ---
+        # --- Save Button ---
         ctk.CTkButton(
             edit_win, 
-            text="Salva Modifiche", 
+            text="Save Changes", 
             fg_color=self.palette["success"],
             hover_color="#1E8449",
             font=ctk.CTkFont(size=15, weight="bold"),
             command=save_changes
         ).pack(pady=(30, 10))
 
+    def _execute_prism(self, model_path: str, props_path: str):
+        """
+        Executes the PRISM model checker in a background subprocess.
+        
+        This method launches the PRISM command-line tool, captures its output,
+        and parses the final result (Probability or Reward) using regular expressions.
+        The result is then displayed in the GUI console.
+
+        Args:
+            model_path (str): The absolute path to the generated .prism file.
+            props_path (str): The absolute path to the generated .props file.
+        """
+        self.write_to_console("[PROCESS] Launching PRISM engine in background...")
+        
+        try:
+            # Building the command. Ensure PRISM is in your PATH.
+            command = ["prism", model_path, props_path]
+            
+            # Start the process in headless mode
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                shell=True # Recommended on Windows for executing batch files like prism.bat
+            )
+            
+            stdout, stderr = process.communicate()
+            
+            if process.returncode != 0:
+                self.write_to_console(f"[ERROR] PRISM execution failed:\n{stderr}")
+                return
+
+            # Parsing logic: PRISM results usually follow "Result: [value]"
+            match = re.search(r"Result:\s*([\d\.]+)", stdout)
+            
+            if match:
+                result_value = match.group(1)
+                self.write_to_console("--- ANALYSIS RESULT ---")
+                self.write_to_console(f"Computed Value: {result_value}")
+                self.write_to_console("-----------------------")
+            else:
+                self.write_to_console("[WARNING] Could not parse the final result from PRISM output.")
+                self.write_to_console("Check the terminal output structure for verification.")
+
+        except FileNotFoundError:
+            self.write_to_console("[CRITICAL] PRISM executable not found. Ensure it is added to the system PATH.")
+        except Exception as e:
+            self.write_to_console(f"[CRITICAL] Subprocess error: {str(e)}")
 
     def run_panacea(self):
-        """Executes the PANACEA conversion process."""
+        """
+        Executes the PANACEA conversion process and triggers PRISM model checking.
+        
+        This method coordinates the data extraction from the R-ADT tree, 
+        saves the PRISM files, and automatically starts the background 
+        verification engine.
+        """
         if not self.current_xml_path:
             return
 
@@ -765,6 +824,9 @@ class PanaceaApp(ctk.CTk):
             self.write_to_console(f"[SUCCESS] Model saved to: {os.path.basename(output_path)}")
             self.write_to_console(f"[SUCCESS] PRISM properties saved to: {os.path.basename(props_path)}")
             self.write_to_console("--- GENERATION COMPLETED ---")
+            
+            # Phase 2: Execute PRISM engine automatically
+            self._execute_prism(output_path, props_path)
 
         except Exception as e:
             self.write_to_console(f"[CRITICAL ERROR] Conversion failed: {str(e)}")
