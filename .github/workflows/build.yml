@@ -7,6 +7,9 @@ on:
     branches: [ "main", "master" ]
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     name: Build for ${{ matrix.os }}
@@ -15,7 +18,7 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            artifact_name: panacea-windows.exe
+            artifact_name: panacea-windows
             pyinstaller_cmd: pyinstaller --noconsole --onefile --icon="assets/icon.ico" --name "PANACEA" panacea-gui.py
           - os: ubuntu-latest
             artifact_name: panacea-linux

@@ -31,7 +31,9 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-and finally you can run the program by only running the following command:
+**Note:** Never forget to activate the venv by running the second command everytime you open the terminal. **Don't create a new one, activate the one you already have**
+
+finally you can run the program by only running the following command:
 
 ```bash 
 python panacea-gui.py
