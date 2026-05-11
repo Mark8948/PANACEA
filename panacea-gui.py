@@ -241,18 +241,19 @@ class PanaceaApp(ctk.CTk):
         try:
             is_windows = platform.system() == "Windows"
             
-            # Use string formatting for Windows to properly handle spaces in paths with shell=True
-            if is_windows:
-                command = f'"{prism_exec}" "{model_path}" "{props_path}"'
-            else:
-                command = [prism_exec, model_path, props_path]
+            command = [prism_exec, model_path, props_path]
+            
+            # FIX FONDAMENTALE: Impostiamo la cartella di lavoro (cwd) sulla cartella 'bin' di PRISM.
+            # Questo permette a Java di risolvere correttamente i percorsi relativi verso i file .jar
+            prism_bin_dir = os.path.dirname(prism_exec)
 
             process = subprocess.Popen(
                 command, 
                 stdout=subprocess.PIPE, 
                 stderr=subprocess.PIPE, 
                 text=True, 
-                shell=is_windows
+                shell=is_windows,
+                cwd=prism_bin_dir  # <--- IL PARAMETRO AGGIUNTO
             )
             stdout, stderr = process.communicate()
             
@@ -278,7 +279,7 @@ class PanaceaApp(ctk.CTk):
         except Exception as e:
             self.write_to_console(f"[CRITICAL] Execution error: {str(e)}")
             return None
-
+        
     def _update_stats_plot(self):
         """Redraws the analysis chart."""
         self.stats_ax.cla()
