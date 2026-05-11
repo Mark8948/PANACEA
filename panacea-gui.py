@@ -176,7 +176,15 @@ class PanaceaApp(ctk.CTk):
         self.write_to_console("--- ANALYSIS COMPLETED ---")
 
     def _get_prism_cmd(self) -> Optional[str]:
-        """Intelligently locates the PRISM-games executable across OS environments."""
+        """
+        Intelligently locates the PRISM-games executable across different OS environments.
+        
+        This method prioritizes a specific default path for Windows installations
+        while maintaining fallback mechanisms for other environments or custom setups.
+
+        Returns:
+            Optional[str]: The absolute path to the PRISM executable, or None if not found.
+        """
         if self.prism_cmd and os.path.exists(self.prism_cmd):
             return self.prism_cmd
             
@@ -193,8 +201,9 @@ class PanaceaApp(ctk.CTk):
         home = os.path.expanduser("~")
         if is_windows:
             common_paths = [
+                # Set your specific version as the primary default choice
+                r"C:\Program Files\prism-games-3.2.4\bin\prism.bat",
                 r"C:\Program Files\prism-games\bin\prism.bat",
-                r"C:\Program Files (x86)\prism-games\bin\prism.bat",
                 r"C:\prism-games\bin\prism.bat"
             ]
         else:
@@ -212,9 +221,9 @@ class PanaceaApp(ctk.CTk):
                 self.write_to_console(f"[INFO] Auto-located PRISM at: {p}")
                 return self.prism_cmd
                 
-        # 3. Fallback: Ask user via file dialog (saved for the session)
+        # 3. Fallback: Prompt user to manually locate the file
         self.write_to_console(f"[WARNING] '{cmd_name}' not found in PATH or standard folders.")
-        self.write_to_console("[INFO] Please locate the PRISM executable manually.")
+        self.write_to_console("[INFO] Please locate the PRISM-games executable manually.")
         
         file_path = filedialog.askopenfilename(
             title=f"Locate PRISM-games executable ({cmd_name})",
@@ -279,7 +288,7 @@ class PanaceaApp(ctk.CTk):
         except Exception as e:
             self.write_to_console(f"[CRITICAL] Execution error: {str(e)}")
             return None
-        
+    
     def _update_stats_plot(self):
         """Redraws the analysis chart."""
         self.stats_ax.cla()
@@ -538,6 +547,25 @@ class PanaceaApp(ctk.CTk):
         self.textbox.configure(state="disabled")
         self.write_to_console("Console cleared.")
 
+    def _on_time_toggle(self):
+        """
+        Registers the toggling of Time Analysis as a modification for the stats tab.
+        This allows the user to immediately run a new analysis to compare the difference.
+        """
+        # Se non c'è nessun albero caricato, non fare nulla
+        if not self.current_tree:
+            return
+            
+        state = "ON" if self.time_analysis.get() == 1 else "OFF"
+        self.write_to_console(f"[PARAM] Time Analysis toggled: {state}")
+        
+        # Aggiungiamo la modifica al tracking
+        self.pending_modifications.append(f"Time Analysis: {state}")
+        
+        # Sblocchiamo il bottone di Run
+        self.tree_modified = True
+        self._update_stats_button_state()
+
     def clear_file(self):
         self.current_xml_path = None
         self.current_tree = None
@@ -621,7 +649,17 @@ class PanaceaApp(ctk.CTk):
         time_card.pack(fill="x", padx=22, pady=(0, 18))
         ctk.CTkLabel(time_card, text="Time Analysis", image=self.icons["clock"], compound="left", font=ctk.CTkFont(size=15, weight="bold"), text_color=self.palette["text"]).pack(anchor="w", padx=16, pady=(16, 6))
         ctk.CTkLabel(time_card, text="Enable the time variant of generation for R-ADT models.", wraplength=250, justify="left", text_color=self.palette["muted"], font=ctk.CTkFont(size=13)).pack(anchor="w", padx=16, pady=(0, 10))
-        self.time_analysis = ctk.CTkCheckBox(time_card, text="Time Analysis (R-ADT)", font=ctk.CTkFont(size=14, weight="bold"), text_color=self.palette["text"], border_color=self.palette["accent"], fg_color=self.palette["accent"], hover_color=self.palette["accent_hover"], corner_radius=4)
+        self.time_analysis = ctk.CTkCheckBox(
+            time_card,
+            text="Time Analysis (R-ADT)",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=self.palette["text"],
+            border_color=self.palette["accent"],
+            fg_color=self.palette["accent"],
+            hover_color=self.palette["accent_hover"],
+            corner_radius=4,
+            command=self._on_time_toggle  # <--- RIGA DA AGGIUNGERE
+        )
         self.time_analysis.pack(anchor="w", padx=16, pady=(0, 16))
 
     def setup_footer(self):
