@@ -143,7 +143,7 @@ class PanaceaApp(ctk.CTk):
         header.grid(row=0, column=0, sticky="ew", pady=(0, 18))
         header.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(header, text="Model Control Panel", font=ctk.CTkFont(size=30, weight="bold"), text_color=self.palette["text"]).grid(row=0, column=0, sticky="w")
-        ctk.CTkLabel(header, text="Quick flow: import XML, choose options, generate PRISM.", font=ctk.CTkFont(size=15), text_color=self.palette["muted"]).grid(row=1, column=0, sticky="w", pady=(4, 0))
+        ctk.CTkLabel(header, text="Quick flow: import XML, choose time option, generate PRISM.", font=ctk.CTkFont(size=15), text_color=self.palette["muted"]).grid(row=1, column=0, sticky="w", pady=(4, 0))
         
         hero = ctk.CTkFrame(self.tab_home, fg_color=self.palette["card"], corner_radius=self.ui_radius, border_width=1, border_color=self.palette["border"])
         hero.grid(row=1, column=0, sticky="ew", pady=(0, 18))
@@ -152,12 +152,12 @@ class PanaceaApp(ctk.CTk):
         
         left_hero = ctk.CTkFrame(hero, fg_color="transparent")
         left_hero.grid(row=0, column=0, sticky="nsew", padx=22, pady=22)
-        ctk.CTkLabel(left_hero, text="Model generation", font=ctk.CTkFont(size=20, weight="bold"), text_color=self.palette["text"]).pack(anchor="w")
+        ctk.CTkLabel(left_hero, text="Model conversion", font=ctk.CTkFont(size=20, weight="bold"), text_color=self.palette["text"]).pack(anchor="w")
         ctk.CTkLabel(left_hero, text="The button remains disabled\nuntil you load a valid XML.", font=ctk.CTkFont(size=14), text_color=self.palette["muted"], justify="left").pack(anchor="w", pady=(6, 14))
         self.status_chip = ctk.CTkLabel(left_hero, text="Waiting for XML file", fg_color=self.palette["surface"], text_color=self.palette["text"], corner_radius=999, padx=12, pady=7, font=ctk.CTkFont(size=13, weight="bold"))
         self.status_chip.pack(anchor="w")
         
-        self.btn_convert = ctk.CTkButton(hero, text="Generate PRISM model", image=self.icons["generate"], compound="left", width=300, height=70, corner_radius=self.inner_radius, fg_color=self.palette["danger"], hover_color=self.palette["success"], text_color=self.palette["text"], font=ctk.CTkFont(size=18, weight="bold"), state="disabled", command=self.run_panacea)
+        self.btn_convert = ctk.CTkButton(hero, text="Convert to PRISM", image=self.icons["generate"], compound="left", width=300, height=70, corner_radius=self.inner_radius, fg_color=self.palette["danger"], hover_color=self.palette["success"], text_color=self.palette["text"], font=ctk.CTkFont(size=18, weight="bold"), state="disabled", command=self.run_panacea)
         self.btn_convert.grid(row=0, column=1, padx=22, pady=22, sticky="e")
         
         console_card = ctk.CTkFrame(self.tab_home, fg_color=self.palette["card_2"], corner_radius=self.ui_radius, border_width=1, border_color=self.palette["border"])
@@ -229,13 +229,11 @@ class PanaceaApp(ctk.CTk):
         self.plot_frame = ctk.CTkFrame(self.tab_stats, fg_color=self.palette["card"], corner_radius=self.ui_radius, border_width=1, border_color=self.palette["border"])
         self.plot_frame.grid(row=0, column=1, sticky="nsew", pady=10)
 
-        # Aumentiamo leggermente l'altezza della figura per accogliere due grafici
         self.stats_fig = Figure(figsize=(8, 6), dpi=100)
         self.stats_fig.patch.set_facecolor(self.palette["card"])
         
-        # FIX DEFINITIVO: Creiamo due grafici separati, impilati uno sull'altro
-        self.stats_ax_cost: Axes = self.stats_fig.add_subplot(211)  # Top chart
-        self.stats_ax_time: Axes = self.stats_fig.add_subplot(212, sharex=self.stats_ax_cost)  # Bottom chart
+        self.stats_ax_cost: Axes = self.stats_fig.add_subplot(211)  # type: ignore
+        self.stats_ax_time: Axes = self.stats_fig.add_subplot(212, sharex=self.stats_ax_cost)  # type: ignore
 
         for ax in [self.stats_ax_cost, self.stats_ax_time]:
             ax.set_facecolor(self.palette["card"])
@@ -316,7 +314,6 @@ class PanaceaApp(ctk.CTk):
         self.stats_ax_cost.cla()
         self.stats_ax_time.cla()
 
-        # Ripristiniamo i colori base dopo il 'cla()' (clear axis)
         for ax in [self.stats_ax_cost, self.stats_ax_time]:
             ax.set_facecolor(self.palette["card"])
             ax.tick_params(colors=self.palette["text"])
@@ -326,7 +323,7 @@ class PanaceaApp(ctk.CTk):
                                ha='center', va='center', color=self.palette["muted"])
             self.stats_ax_cost.set_xticks([])
             self.stats_ax_cost.set_yticks([])
-            self.stats_ax_time.set_visible(False) # Nascondiamo il grafico sotto se è vuoto
+            self.stats_ax_time.set_visible(False) 
         else:
             self.stats_ax_time.set_visible(True)
             labels = [h[0] for h in self.run_history]
@@ -334,13 +331,13 @@ class PanaceaApp(ctk.CTk):
             times = [h[2] for h in self.run_history]
             x = list(range(len(costs)))
 
-            # --- COST PLOT (GRAFICO IN ALTO) ---
+            # --- COST PLOT ---
             self.stats_ax_cost.plot(x, costs, marker='o', linewidth=2.5, color='#3498DB')
             self.stats_ax_cost.set_title("Attack Cost Evolution", color='#3498DB', fontsize=12, pad=10)
             self.stats_ax_cost.set_ylabel("Cost", color='#3498DB', fontsize=10, fontweight='bold')
             self.stats_ax_cost.tick_params(axis='y', labelcolor='#3498DB')
             
-            # --- TIME PLOT (GRAFICO IN BASSO) ---
+            # --- TIME PLOT ---
             self.stats_ax_time.plot(x, times, marker='s', linewidth=2.5, color='#E74C3C')
             self.stats_ax_time.set_title("Attack Time Evolution", color='#E74C3C', fontsize=12, pad=10)
             self.stats_ax_time.set_ylabel("Time", color='#E74C3C', fontsize=10, fontweight='bold')
@@ -359,31 +356,33 @@ class PanaceaApp(ctk.CTk):
                 ax.spines['top'].set_visible(False)
                 ax.spines['right'].set_visible(False)
             
-            # Etichette asse X visibili solo sul grafico in basso
             self.stats_ax_cost.set_xticklabels([])
             self.stats_ax_time.set_xticklabels(labels, fontsize=9, color=self.palette["text"])
 
-            # --- LOGICA DI SPAZIATURA (PADDING) DINAMICA ---
-            # Previene il taglio delle etichette e le linee piatte non realistiche
             for ax, vals in [(self.stats_ax_cost, costs), (self.stats_ax_time, times)]:
                 v_min, v_max = min(vals), max(vals)
                 v_range = v_max - v_min if v_max > v_min else (v_max * 0.2 if v_max > 0 else 10)
                 if v_range == 0: 
                     v_range = 10
                 
-                # Lasciamo 40% di spazio sopra per non tagliare le scritte annotate
                 ax.set_ylim(max(0, v_min - v_range * 0.2), v_max + v_range * 0.4)
-                
-                # Centratura se c'è un solo punto
                 if len(x) == 1:
                     ax.set_xlim(-0.5, 0.5)
 
-            # Aggiustiamo le distanze tra i due grafici
             self.stats_fig.subplots_adjust(hspace=0.35, bottom=0.15, right=0.95, left=0.1)
 
         self.stats_canvas.draw()
 
     # --- PATH RESOLVING & EXECUTION ---
+
+    def _get_default_user_dir(self) -> str:
+        """Determines the best default directory for user files (e.g., XMLs)."""
+        home = os.path.expanduser("~")
+        if platform.system() == "Linux":
+            desktop = os.path.join(home, "Desktop")
+            if os.path.exists(desktop):
+                return desktop
+        return home
 
     def _get_prism_cmd(self) -> Optional[str]:
         """Intelligently locates the PRISM-games executable."""
@@ -393,11 +392,16 @@ class PanaceaApp(ctk.CTk):
         is_windows = platform.system() == "Windows"
         cmd_name = "prism.bat" if is_windows else "prism"
         
-        # PRIORITÀ 1: Verifica prima il tuo percorso custom di Windows
+        # PRIORITÀ 1: Verifica i percorsi custom specifici di Windows
         if is_windows:
-            primary_path = r"C:\Program Files\prism-games-3.2.4\bin\prism.bat"
-            if os.path.exists(primary_path) and os.path.isfile(primary_path):
-                self.prism_cmd = primary_path
+            primary_path_1 = r"C:\Program Files\prism-games-3.2.4\bin\prism.bat"
+            primary_path_2 = r"C:\Program Files\prism-games-3.2.2\bin\prism.bat"
+            
+            if os.path.exists(primary_path_1) and os.path.isfile(primary_path_1):
+                self.prism_cmd = primary_path_1
+                return self.prism_cmd
+            if os.path.exists(primary_path_2) and os.path.isfile(primary_path_2):
+                self.prism_cmd = primary_path_2
                 return self.prism_cmd
 
         # PRIORITÀ 2: Variabili d'ambiente (PATH)
@@ -425,12 +429,20 @@ class PanaceaApp(ctk.CTk):
                 self.write_to_console(f"[INFO] Auto-located PRISM at: {p}")
                 return self.prism_cmd
                 
-        # FALLBACK: Richiesta manuale
+        # FALLBACK: Richiesta manuale con cartella iniziale intelligente e MIRATA
         self.write_to_console(f"[WARNING] '{cmd_name}' not found in PATH or standard folders.")
         self.write_to_console("[INFO] Please locate the PRISM-games executable manually.")
         
+        initial_dir = "/"
+        if is_windows:
+            suggested_dir = r"C:\Program Files\prism-games-3.2.2\bin"
+            initial_dir = suggested_dir if os.path.exists(suggested_dir) else r"C:\Program Files"
+        else:
+            initial_dir = os.path.expanduser("~/")
+        
         file_path = filedialog.askopenfilename(
             title=f"Locate PRISM-games executable ({cmd_name})",
+            initialdir=initial_dir,  # APRE DIRETTAMENTE LA CARTELLA DI PRISM-GAMES
             filetypes=[("Batch Files", "*.bat"), ("Executable", "*.exe"), ("All files", "*.*")] if is_windows else [("All files", "*.*")]
         )
         
@@ -455,7 +467,6 @@ class PanaceaApp(ctk.CTk):
             is_windows = platform.system() == "Windows"
             command = [prism_exec, model_path, props_path]
             
-            # cwd permette a Java di risolvere i percorsi relativi correttamente
             prism_bin_dir = os.path.dirname(prism_exec)
 
             process = subprocess.Popen(
@@ -585,7 +596,14 @@ class PanaceaApp(ctk.CTk):
         self._update_stats_button_state()
 
     def load_xml(self):
-        file_path = filedialog.askopenfilename(filetypes=[("XML files", "*.xml")])
+        # AZZERAMENTO MEMORIA: Forza l'apertura in cartelle standard utente (Desktop o Home)
+        initial_dir = self._get_default_user_dir()
+        
+        file_path = filedialog.askopenfilename(
+            initialdir=initial_dir,
+            title="Select Attack-Defense Tree XML",
+            filetypes=[("XML files", "*.xml")]
+        )
         if file_path:
             try:
                 self.current_xml_path = file_path
@@ -621,7 +639,16 @@ class PanaceaApp(ctk.CTk):
         if not self.current_xml_path: return
         
         use_time = self.time_analysis.get() == 1
-        output_path = filedialog.asksaveasfilename(defaultextension=".prism", filetypes=[("PRISM files", "*.prism")])
+        
+        # AZZERAMENTO MEMORIA: Salva di default nella stessa cartella da cui hai caricato l'XML
+        start_dir = os.path.dirname(self.current_xml_path)
+        
+        output_path = filedialog.asksaveasfilename(
+            initialdir=start_dir,
+            title="Save PRISM model as...",
+            defaultextension=".prism", 
+            filetypes=[("PRISM files", "*.prism")]
+        )
         if not output_path: return
 
         self.write_to_console("--- GENERATION STARTED ---")
