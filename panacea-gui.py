@@ -143,7 +143,7 @@ class PanaceaApp(ctk.CTk):
         header.grid(row=0, column=0, sticky="ew", pady=(0, 18))
         header.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(header, text="Model Control Panel", font=ctk.CTkFont(size=30, weight="bold"), text_color=self.palette["text"]).grid(row=0, column=0, sticky="w")
-        ctk.CTkLabel(header, text="Quick flow: import XML, choose time option, generate PRISM.", font=ctk.CTkFont(size=15), text_color=self.palette["muted"]).grid(row=1, column=0, sticky="w", pady=(4, 0))
+        ctk.CTkLabel(header, text="Quick flow: import XML, choose options, generate PRISM.", font=ctk.CTkFont(size=15), text_color=self.palette["muted"]).grid(row=1, column=0, sticky="w", pady=(4, 0))
         
         hero = ctk.CTkFrame(self.tab_home, fg_color=self.palette["card"], corner_radius=self.ui_radius, border_width=1, border_color=self.palette["border"])
         hero.grid(row=1, column=0, sticky="ew", pady=(0, 18))
@@ -152,12 +152,12 @@ class PanaceaApp(ctk.CTk):
         
         left_hero = ctk.CTkFrame(hero, fg_color="transparent")
         left_hero.grid(row=0, column=0, sticky="nsew", padx=22, pady=22)
-        ctk.CTkLabel(left_hero, text="Model conversion", font=ctk.CTkFont(size=20, weight="bold"), text_color=self.palette["text"]).pack(anchor="w")
+        ctk.CTkLabel(left_hero, text="Model generation", font=ctk.CTkFont(size=20, weight="bold"), text_color=self.palette["text"]).pack(anchor="w")
         ctk.CTkLabel(left_hero, text="The button remains disabled\nuntil you load a valid XML.", font=ctk.CTkFont(size=14), text_color=self.palette["muted"], justify="left").pack(anchor="w", pady=(6, 14))
         self.status_chip = ctk.CTkLabel(left_hero, text="Waiting for XML file", fg_color=self.palette["surface"], text_color=self.palette["text"], corner_radius=999, padx=12, pady=7, font=ctk.CTkFont(size=13, weight="bold"))
         self.status_chip.pack(anchor="w")
         
-        self.btn_convert = ctk.CTkButton(hero, text="Convert to PRISM", image=self.icons["generate"], compound="left", width=300, height=70, corner_radius=self.inner_radius, fg_color=self.palette["danger"], hover_color=self.palette["success"], text_color=self.palette["text"], font=ctk.CTkFont(size=18, weight="bold"), state="disabled", command=self.run_panacea)
+        self.btn_convert = ctk.CTkButton(hero, text="Generate PRISM model", image=self.icons["generate"], compound="left", width=300, height=70, corner_radius=self.inner_radius, fg_color=self.palette["danger"], hover_color=self.palette["success"], text_color=self.palette["text"], font=ctk.CTkFont(size=18, weight="bold"), state="disabled", command=self.run_panacea)
         self.btn_convert.grid(row=0, column=1, padx=22, pady=22, sticky="e")
         
         console_card = ctk.CTkFrame(self.tab_home, fg_color=self.palette["card_2"], corner_radius=self.ui_radius, border_width=1, border_color=self.palette["border"])
@@ -429,7 +429,7 @@ class PanaceaApp(ctk.CTk):
                 self.write_to_console(f"[INFO] Auto-located PRISM at: {p}")
                 return self.prism_cmd
                 
-        # FALLBACK: Richiesta manuale con cartella iniziale intelligente e MIRATA
+        # FALLBACK: Richiesta manuale con filtri OS-specific
         self.write_to_console(f"[WARNING] '{cmd_name}' not found in PATH or standard folders.")
         self.write_to_console("[INFO] Please locate the PRISM-games executable manually.")
         
@@ -439,11 +439,18 @@ class PanaceaApp(ctk.CTk):
             initial_dir = suggested_dir if os.path.exists(suggested_dir) else r"C:\Program Files"
         else:
             initial_dir = os.path.expanduser("~/")
+            
+        # --- FIX: Filtri differenziati per OS (Risolve il problema Linux invisibile) ---
+        if is_windows:
+            dialog_filters = [("Batch Files", "*.bat"), ("Executable", "*.exe"), ("All files", "*.*")]
+        else:
+            # Su Linux usiamo "*" (senza punto) per mostrare i file privi di estensione come 'prism'
+            dialog_filters = [("Linux Executable", "*"), ("All files", "*")]
         
         file_path = filedialog.askopenfilename(
             title=f"Locate PRISM-games executable ({cmd_name})",
-            initialdir=initial_dir,  # APRE DIRETTAMENTE LA CARTELLA DI PRISM-GAMES
-            filetypes=[("Batch Files", "*.bat"), ("Executable", "*.exe"), ("All files", "*.*")] if is_windows else [("All files", "*.*")]
+            initialdir=initial_dir,
+            filetypes=dialog_filters
         )
         
         if file_path:
@@ -596,7 +603,6 @@ class PanaceaApp(ctk.CTk):
         self._update_stats_button_state()
 
     def load_xml(self):
-        # AZZERAMENTO MEMORIA: Forza l'apertura in cartelle standard utente (Desktop o Home)
         initial_dir = self._get_default_user_dir()
         
         file_path = filedialog.askopenfilename(
@@ -640,7 +646,6 @@ class PanaceaApp(ctk.CTk):
         
         use_time = self.time_analysis.get() == 1
         
-        # AZZERAMENTO MEMORIA: Salva di default nella stessa cartella da cui hai caricato l'XML
         start_dir = os.path.dirname(self.current_xml_path)
         
         output_path = filedialog.asksaveasfilename(
