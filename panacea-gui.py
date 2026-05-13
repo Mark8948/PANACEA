@@ -508,6 +508,10 @@ class PanaceaApp(ctk.CTk):
             self.write_to_console(f"[CRITICAL] Execution error: {str(e)}")
             return None
 
+    def is_positive_integer(self, value: str) -> bool:
+        text = str(value).strip()
+        return bool(re.fullmatch(r"[1-9][0-9]*", text))
+
     # --- UI EVENT HANDLERS ---
 
     def _on_context_edit(self, node_label: str):
@@ -549,6 +553,14 @@ class PanaceaApp(ctk.CTk):
         def save_changes():
             new_cost = cost_entry.get().strip()
             new_time = time_entry.get().strip()
+
+            if not self.is_positive_integer(new_cost):
+                self.write_to_console(f"[ERROR] Cost must be a positive integer.")
+                return
+            if not self.is_positive_integer(new_time):
+                self.write_to_console(f"[ERROR] Time must be a positive integer.")
+                return
+
             node.cost = new_cost
             node.time = new_time
             self.write_to_console(f"[EDIT] Node '{node_label}' -> Cost: {new_cost} | Time: {new_time}")
