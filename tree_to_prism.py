@@ -154,18 +154,17 @@ def get_prism_model(tree):
     """
     df = tree.to_dataframe()
     goal, actions_to_goal, initial_attributes, attacker_actions, defender_actions, df_attacker, df_defender = get_info(df)
-    text = "smg\n\nplayer attacker\n\tattacker,\n\t"
-
-    for a in attacker_actions.keys():
-        text += f"[{a}], "
-        
-    text = text[:-2]
-    text += "\nendplayer\nplayer defender\n\tdefender,\n\t"
-
-    for a in defender_actions.keys():
-        text += f"[{a}], "
     
-    text = text[:-2]   
+    text = "smg\n\nplayer attacker\n\tattacker"
+    att_actions = [f"[{a}]" for a in attacker_actions.keys()]
+    if att_actions:
+        text += ", " + ", ".join(att_actions)
+    text += "\nendplayer\n"
+
+    text += "player defender\n\tdefender"
+    def_actions = [f"[{a}]" for a in defender_actions.keys()]
+    if def_actions:
+        text += ", " + ", ".join(def_actions)
     text += "\nendplayer\n\nglobal sched : [1..2];\n\n"
 
     text += f'global {goal} : [0..1];\nlabel "terminate" = {goal}=1;\n\n'
@@ -266,18 +265,20 @@ def get_prism_model_time(tree):
     attacker_max_time = max(df_attacker["Time"].values)
     defender_max_time = max(df_defender["Time"].values)
     
-    text = "smg\n\nplayer attacker\n\tattacker, [wait1],\n\t"
-
+    text = "smg\n\nplayer attacker\n\tattacker, [wait1]"
+    att_actions = []
     for a in attacker_actions.keys():
-        text += f"[start{a}], [end{a}], "
-        
-    text = text[:-2]
-    text += "\nendplayer\nplayer defender\n\tdefender, [wait2],\n\t"
+        att_actions.extend([f"[start{a}]", f"[end{a}]"])
+    if att_actions:
+        text += ", " + ", ".join(att_actions)
+    text += "\nendplayer\n"
 
+    text += "player defender\n\tdefender, [wait2]"
+    def_actions = []
     for a in defender_actions.keys():
-        text += f"[start{a}], [end{a}], "
-    
-    text = text[:-2]   
+        def_actions.extend([f"[start{a}]", f"[end{a}]"])
+    if def_actions:
+        text += ", " + ", ".join(def_actions)
     text += "\nendplayer\n\nglobal sched : [1..2];\n\n"
 
     text += f'global {goal} : [0..1];\nlabel "terminate" = {goal}=1;\n\n'
@@ -394,4 +395,3 @@ def save_prism_properties(file):
         f.write('// Each agent tries to get the minimum expected cost to reach a terminate state\n')
         f.write('<<attacker,defender>>R{"attacker"}min=? [ F "terminate" ] + R{"defender"}min=? [ F "deadlock" ]\n')
         f.close()
-    

@@ -150,9 +150,21 @@ class Tree:
                 for child_label in children:
                     if child_label not in added_nodes:
                         child_node = self.get_node(child_label)
-                        pruned_tree.add_node(child_node)
-                        added_nodes.add(child_label)
-                        pruned_tree.add_edge(parent_node, child_node)
+                        
+                        if child_node.role == "Defender":
+                            # Fix: Preserve the entire subtree for Defender nodes to keep their preconditions
+                            subtree = self.get_subtree(child_label)
+                            for node in subtree.nodes:
+                                if node.label not in added_nodes:
+                                    pruned_tree.add_node(node)
+                                    added_nodes.add(node.label)
+                            for edge in subtree.edges:
+                                pruned_tree.edges.append(edge)
+                            pruned_tree.add_edge(parent_node, child_node)
+                        else:
+                            pruned_tree.add_node(child_node)
+                            added_nodes.add(child_label)
+                            pruned_tree.add_edge(parent_node, child_node)
         
         return pruned_tree
                 
@@ -198,4 +210,3 @@ class Tree:
                 queue.append(child)
                 
         return tree
-        
