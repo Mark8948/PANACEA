@@ -8,6 +8,7 @@ Renders the attack-defence tree on an embedded Matplotlib canvas with:
   - Pan by left-drag on background, zoom by scroll wheel
   - Right-click context menu: Prune / Reset
   - Node drag: hold Ctrl + left-drag on a node to reposition it manually (Blitting High-Performance 60FPS)
+  - Ultra-fast vectorized background grid
 """
 
 import textwrap
@@ -192,12 +193,16 @@ class TreeVisualizer:
             x_lo, x_hi = min(xs) - 0.4, max(xs) + 0.4
             y_lo, y_hi = min(ys) - 0.4, max(ys) + 0.4
 
+        # ─── OTTIMIZZAZIONE DELLA GRIGLIA (VECTORIZED) ────────────────────────
         gx = np.arange(round(x_lo, 1), x_hi + 0.05, 0.1)
         gy = np.arange(round(y_lo, 1), y_hi + 0.05, 0.1)
         grid_color = _get_color("grid")
-        for gxi in gx:
-            for gyi in gy:
-                ax.plot(gxi, gyi, ".", color=grid_color, markersize=1, zorder=0, alpha=0.35)
+        
+        # Invece di un ciclo for, creiamo una matrice di punti e passiamo tutto
+        # a Matplotlib in una sola passata. Questo genera 1 solo oggetto invece di migliaia!
+        X, Y = np.meshgrid(gx, gy)
+        ax.plot(X.flatten(), Y.flatten(), marker=".", linestyle="none", color=grid_color, markersize=1, zorder=0, alpha=0.35)
+        # ──────────────────────────────────────────────────────────────────────
 
         for u, v, data in G.edges(data=True):
             if u not in pos or v not in pos:
@@ -222,6 +227,7 @@ class TreeVisualizer:
                     connectionstyle="arc3,rad=0.08",
                 ),
                 zorder=1,
+                annotation_clip=False, # FORZA LA VISUALIZZAZIONE ANCHE FUORI SCHERMO
             )
 
             action = data.get("action", "")
@@ -240,6 +246,7 @@ class TreeVisualizer:
                         edgecolor="none",
                         alpha=0.78,
                     ),
+                    clip_on=False, # FORZA LA VISUALIZZAZIONE ANCHE FUORI SCHERMO
                 )
             
             self._drawn_edges[(u, v)] = {'arrow': ann, 'text': txt}
@@ -252,10 +259,11 @@ class TreeVisualizer:
             border_c = _get_color("defender_border") if is_def else _get_color("attacker_border")
             glow_c = _get_color("defender_glow") if is_def else _get_color("attacker_glow")
 
-            glow1 = mpatches.Circle((x, y), r + 0.022, color=glow_c, alpha=0.14, zorder=2)
-            glow2 = mpatches.Circle((x, y), r + 0.010, color=glow_c, alpha=0.28, zorder=2)
-            fill = mpatches.Circle((x, y), r, color=fill_c, zorder=3)
-            border = mpatches.Circle((x, y), r, fill=False, edgecolor=border_c, linewidth=2.2, zorder=4)
+            # Aggiunto clip_on=False a tutti i componenti del nodo
+            glow1 = mpatches.Circle((x, y), r + 0.022, color=glow_c, alpha=0.14, zorder=2, clip_on=False)
+            glow2 = mpatches.Circle((x, y), r + 0.010, color=glow_c, alpha=0.28, zorder=2, clip_on=False)
+            fill = mpatches.Circle((x, y), r, color=fill_c, zorder=3, clip_on=False)
+            border = mpatches.Circle((x, y), r, fill=False, edgecolor=border_c, linewidth=2.2, zorder=4, clip_on=False)
 
             ax.add_patch(glow1)
             ax.add_patch(glow2)
@@ -269,6 +277,7 @@ class TreeVisualizer:
                 color=_get_color("node_text"),
                 ha="center", va="center", zorder=5,
                 multialignment="center",
+                clip_on=False, # FORZA LA VISUALIZZAZIONE ANCHE FUORI SCHERMO
             )
 
             self._drawn_nodes[label] = {
@@ -426,7 +435,6 @@ class TreeVisualizer:
                 self._drag_node = node
                 self._moving_artists = []
                 
-                # 1. Raccoglie tutti gli oggetti visivi del nodo
                 node_arts = self._drawn_nodes.get(node)
                 if node_arts:
                     self._moving_artists.extend([
@@ -434,23 +442,19 @@ class TreeVisualizer:
                         node_arts['fill'], node_arts['border'], node_arts['text']
                     ])
                 
-                # 2. Raccoglie tutti gli archi collegati al nodo
                 for (u, v), edge_arts in self._drawn_edges.items():
                     if u == node or v == node:
                         self._moving_artists.append(edge_arts['arrow'])
                         if edge_arts['text']:
                             self._moving_artists.append(edge_arts['text'])
                 
-                # 3. Imposta animated=True: Matplotlib ignorerà questi oggetti durante il prossimo draw()
                 for artist in self._moving_artists:
                     artist.set_animated(True)
                 
-                # 4. Disegna il canvas "pulito" senza il nodo e salva lo sfondo in cache (Blitting)
                 if self.canvas:
                     self.canvas.draw()
                     self._bg_cache = self.canvas.copy_from_bbox(self.ax.bbox)
                     
-                    # 5. Disegna manualmente il nodo sulla cache e spara a schermo
                     for artist in self._moving_artists:
                         self.ax.draw_artist(artist)
                     self.canvas.blit(self.ax.bbox)
@@ -467,7 +471,6 @@ class TreeVisualizer:
     def _on_release(self, event) -> None:
         if event.button == 1:
             if self._drag_node:
-                # Ripristina lo stato normale
                 for artist in self._moving_artists:
                     artist.set_animated(False)
                 
@@ -485,15 +488,12 @@ class TreeVisualizer:
         if ax is None or event.inaxes != ax:
             return
 
-        # GESTIONE BLITTING DEL TRASCINAMENTO NODO (ULTRA PRESTAZIONI)
         if self._drag_node and self._bg_cache is not None and event.xdata is not None and event.ydata is not None:
             nx, ny = event.xdata, event.ydata
             self._pos[self._drag_node] = (nx, ny)
 
-            # 1. Ripristina il background pulito (rimuove il frame precedente all'istante)
             self.canvas.restore_region(self._bg_cache)
 
-            # 2. Aggiorna le posizioni degli artisti del nodo
             node_arts = self._drawn_nodes.get(self._drag_node)
             if node_arts:
                 node_arts['glow1'].set_center((nx, ny))
@@ -502,7 +502,6 @@ class TreeVisualizer:
                 node_arts['border'].set_center((nx, ny))
                 node_arts['text'].set_position((nx, ny))
 
-            # 3. Aggiorna le posizioni degli archi collegati
             for (u, v), edge_arts in self._drawn_edges.items():
                 if u == self._drag_node or v == self._drag_node:
                     x0, y0 = self._pos[u]
@@ -516,15 +515,12 @@ class TreeVisualizer:
                         my = (y0 + y1) / 2 + 0.02
                         edge_arts['text'].set_position((mx, my))
 
-            # 4. Disegna solo gli artisti aggiornati
             for artist in self._moving_artists:
                 self.ax.draw_artist(artist)
 
-            # 5. Invia il buffer direttamente allo schermo
             self.canvas.blit(self.ax.bbox)
             return
 
-        # BACKGROUND PAN MANAGEMENT
         if self._pan_active and self._pan_start_xlim is not None and self._pan_start_ylim is not None:
             dx_pixels = event.x - self._pan_start_x
             dy_pixels = event.y - self._pan_start_y
