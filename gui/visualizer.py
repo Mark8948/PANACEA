@@ -784,18 +784,18 @@ class TreeVisualizer:
         )
 
         if node_label:
-            # NUOVO COMANDO MODIFICA
+            # NEW EDIT COMMAND
             menu.add_command(
-                label=f"\u270E  Modifica Parametri: {node_label}",
+                label=f"\u270E  Edit Parameters: {node_label}",
                 command=lambda: self._trigger_edit(node_label),
             )
             menu.add_command(
-                label=f"\u2702  Pota da: {node_label}",
+                label=f"\u2702  Prune from: {node_label}",
                 command=lambda: self._trigger_prune(node_label),
             )
         else:
-            menu.add_command(label="\u270E  Modifica (clicca un nodo)", state="disabled")
-            menu.add_command(label="\u2702  Pota (clicca un nodo)", state="disabled")
+            menu.add_command(label="\u270E  Edit (click a node)", state="disabled")
+            menu.add_command(label="\u2702  Prune (click a node)", state="disabled")
 
         menu.add_separator()
         menu.add_command(label="\u21ba  Reset tree", command=self._trigger_reset)
