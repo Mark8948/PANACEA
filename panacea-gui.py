@@ -14,7 +14,7 @@ from typing import Optional, List, Tuple
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from matplotlib.axes import Axes  # Risolve gli avvisi di Pylance
+from matplotlib.axes import Axes
 
 from gui.visualizer import TreeVisualizer
 from gui.palette import PALETTE
@@ -50,7 +50,6 @@ class PanaceaApp(ctk.CTk):
         
         # --- ANALYSIS & STATS TRACKING ---
         self.prism_cmd: Optional[str] = None  
-        # History stores tuples: (Modification_Label, Cost_Value, Time_Value)
         self.run_history: List[Tuple[str, float, float]] = []                 
         self.pending_modifications = []       
         self.tree_modified = False
@@ -296,7 +295,11 @@ class PanaceaApp(ctk.CTk):
                 self.pending_modifications.clear()
                 
                 self._update_stats_plot()
-                self.write_to_console(f"[SUCCESS] Results stored - Cost: {res_cost:.2f}, Time: {res_time:.2f}")
+                
+                if res_cost == float('inf') or res_time == float('inf'):
+                    self.write_to_console("[SUCCESS] Results stored - Attack blocked (INF)")
+                else:
+                    self.write_to_console(f"[SUCCESS] Results stored - Cost: {res_cost:.2f}, Time: {res_time:.2f}")
             else:
                 self.write_to_console("[ERROR] One or both analysis steps failed.")
                 self.tree_modified = True 
@@ -331,24 +334,36 @@ class PanaceaApp(ctk.CTk):
             times = [h[2] for h in self.run_history]
             x = list(range(len(costs)))
 
+            # Clean values for plotting to avoid matplotlib crash on inf
+            finite_costs = [c for c in costs if c != float('inf')]
+            cost_cap = max(finite_costs) * 1.3 if finite_costs else 100
+            plot_costs = [c if c != float('inf') else cost_cap for c in costs]
+
+            finite_times = [t for t in times if t != float('inf')]
+            time_cap = max(finite_times) * 1.3 if finite_times else 100
+            plot_times = [t if t != float('inf') else time_cap for t in times]
+
             # --- COST PLOT ---
-            self.stats_ax_cost.plot(x, costs, marker='o', linewidth=2.5, color='#3498DB')
-            self.stats_ax_cost.set_title("Attack Cost Evolution", color='#3498DB', fontsize=12, pad=10)
-            self.stats_ax_cost.set_ylabel("Cost", color='#3498DB', fontsize=10, fontweight='bold')
-            self.stats_ax_cost.tick_params(axis='y', labelcolor='#3498DB')
+            self.stats_ax_cost.plot(x, plot_costs, marker='o', linewidth=2.5, color=self.palette["chart_cost"])
+            self.stats_ax_cost.set_title("Attack Cost Evolution", color=self.palette["chart_cost"], fontsize=12, pad=10)
+            self.stats_ax_cost.set_ylabel("Cost", color=self.palette["chart_cost"], fontsize=10, fontweight='bold')
+            self.stats_ax_cost.tick_params(axis='y', labelcolor=self.palette["chart_cost"])
             
             # --- TIME PLOT ---
-            self.stats_ax_time.plot(x, times, marker='s', linewidth=2.5, color='#E74C3C')
-            self.stats_ax_time.set_title("Attack Time Evolution", color='#E74C3C', fontsize=12, pad=10)
-            self.stats_ax_time.set_ylabel("Time", color='#E74C3C', fontsize=10, fontweight='bold')
-            self.stats_ax_time.tick_params(axis='y', labelcolor='#E74C3C')
+            self.stats_ax_time.plot(x, plot_times, marker='s', linewidth=2.5, color=self.palette["chart_time"])
+            self.stats_ax_time.set_title("Attack Time Evolution", color=self.palette["chart_time"], fontsize=12, pad=10)
+            self.stats_ax_time.set_ylabel("Time", color=self.palette["chart_time"], fontsize=10, fontweight='bold')
+            self.stats_ax_time.tick_params(axis='y', labelcolor=self.palette["chart_time"])
 
-            # --- ANNOTAZIONI E STILE COMUNE ---
+            # --- ANNOTATIONS AND COMMON STYLE ---
             for i in range(len(x)):
-                self.stats_ax_cost.annotate(f"{costs[i]:.1f}", (x[i], costs[i]), xytext=(0, 10), 
-                                       textcoords="offset points", color='#3498DB', weight='bold', ha='center')
-                self.stats_ax_time.annotate(f"{times[i]:.1f}", (x[i], times[i]), xytext=(0, 10), 
-                                       textcoords="offset points", color='#E74C3C', weight='bold', ha='center')
+                c_lbl = "INF" if costs[i] == float('inf') else f"{costs[i]:.1f}"
+                t_lbl = "INF" if times[i] == float('inf') else f"{times[i]:.1f}"
+
+                self.stats_ax_cost.annotate(c_lbl, (x[i], plot_costs[i]), xytext=(0, 10), 
+                                       textcoords="offset points", color=self.palette["chart_cost"], weight='bold', ha='center')
+                self.stats_ax_time.annotate(t_lbl, (x[i], plot_times[i]), xytext=(0, 10), 
+                                       textcoords="offset points", color=self.palette["chart_time"], weight='bold', ha='center')
 
             for ax in [self.stats_ax_cost, self.stats_ax_time]:
                 ax.set_xticks(x)
@@ -359,8 +374,14 @@ class PanaceaApp(ctk.CTk):
             self.stats_ax_cost.set_xticklabels([])
             self.stats_ax_time.set_xticklabels(labels, fontsize=9, color=self.palette["text"])
 
-            for ax, vals in [(self.stats_ax_cost, costs), (self.stats_ax_time, times)]:
+            for ax, vals, cap in [(self.stats_ax_cost, finite_costs, cost_cap), (self.stats_ax_time, finite_times, time_cap)]:
+                if not vals:
+                    ax.set_ylim(0, cap * 1.5)
+                    continue
                 v_min, v_max = min(vals), max(vals)
+                if float('inf') in (costs if ax == self.stats_ax_cost else times):
+                    v_max = cap
+                
                 v_range = v_max - v_min if v_max > v_min else (v_max * 0.2 if v_max > 0 else 10)
                 if v_range == 0: 
                     v_range = 10
@@ -392,7 +413,7 @@ class PanaceaApp(ctk.CTk):
         is_windows = platform.system() == "Windows"
         cmd_name = "prism.bat" if is_windows else "prism"
         
-        # PRIORITÀ 1: Verifica i percorsi custom specifici di Windows
+        # PRIORITY 1: Check Windows-specific custom paths
         if is_windows:
             primary_path_1 = r"C:\Program Files\prism-games-3.2.4\bin\prism.bat"
             primary_path_2 = r"C:\Program Files\prism-games-3.2.2\bin\prism.bat"
@@ -404,13 +425,13 @@ class PanaceaApp(ctk.CTk):
                 self.prism_cmd = primary_path_2
                 return self.prism_cmd
 
-        # PRIORITÀ 2: Variabili d'ambiente (PATH)
+        # PRIORITY 2: Environment variables (PATH)
         path_in_env = shutil.which(cmd_name)
         if path_in_env:
             self.prism_cmd = path_in_env
             return self.prism_cmd
             
-        # PRIORITÀ 3: Altri percorsi comuni di fallback
+        # PRIORITY 3: Other common fallback paths
         if is_windows:
             common_paths = [
                 r"C:\Program Files\prism-games\bin\prism.bat",
@@ -429,7 +450,7 @@ class PanaceaApp(ctk.CTk):
                 self.write_to_console(f"[INFO] Auto-located PRISM at: {p}")
                 return self.prism_cmd
                 
-        # FALLBACK: Richiesta manuale con filtri OS-specific
+        # FALLBACK: Manual request with OS-specific filters
         self.write_to_console(f"[WARNING] '{cmd_name}' not found in PATH or standard folders.")
         self.write_to_console("[INFO] Please locate the PRISM-games executable manually.")
         
@@ -440,11 +461,9 @@ class PanaceaApp(ctk.CTk):
         else:
             initial_dir = os.path.expanduser("~/")
             
-        # --- FIX: Filtri differenziati per OS (Risolve il problema Linux invisibile) ---
         if is_windows:
             dialog_filters = [("Batch Files", "*.bat"), ("Executable", "*.exe"), ("All files", "*.*")]
         else:
-            # Su Linux usiamo "*" (senza punto) per mostrare i file privi di estensione come 'prism'
             dialog_filters = [("Linux Executable", "*"), ("All files", "*")]
         
         file_path = filedialog.askopenfilename(
@@ -490,14 +509,20 @@ class PanaceaApp(ctk.CTk):
                 self.write_to_console(f"[ERROR] Engine returned code {process.returncode}:\n{stderr.strip()}")
                 return None
 
-            match = re.search(r"Result:\s*([\d\.]+)", stdout)
+            # Fix: Regex for tracking Infinity and general numbers
+            match = re.search(r"Result:\s*([a-zA-Z\d\.]+)", stdout)
             if match:
-                result_value = float(match.group(1))
-                if not silent:
-                    self.write_to_console("--- ANALYSIS RESULT ---")
-                    self.write_to_console(f"Computed Value: {result_value}")
-                    self.write_to_console("-----------------------")
-                return result_value
+                val_str = match.group(1)
+                try:
+                    result_value = float(val_str)
+                    if not silent:
+                        self.write_to_console("--- ANALYSIS RESULT ---")
+                        self.write_to_console(f"Computed Value: {result_value}")
+                        self.write_to_console("-----------------------")
+                    return result_value
+                except ValueError:
+                    self.write_to_console(f"[WARNING] Unrecognized result format: {val_str}")
+                    return None
             else:
                 self.write_to_console("[WARNING] Could not parse the final result from PRISM output.")
                 if not silent:
@@ -507,6 +532,10 @@ class PanaceaApp(ctk.CTk):
         except Exception as e:
             self.write_to_console(f"[CRITICAL] Execution error: {str(e)}")
             return None
+
+    def is_positive_integer(self, value: str) -> bool:
+        text = str(value).strip()
+        return bool(re.fullmatch(r"[1-9][0-9]*", text))
 
     # --- UI EVENT HANDLERS ---
 
@@ -549,6 +578,14 @@ class PanaceaApp(ctk.CTk):
         def save_changes():
             new_cost = cost_entry.get().strip()
             new_time = time_entry.get().strip()
+
+            if not self.is_positive_integer(new_cost):
+                self.write_to_console(f"[ERROR] Cost must be a positive integer.")
+                return
+            if not self.is_positive_integer(new_time):
+                self.write_to_console(f"[ERROR] Time must be a positive integer.")
+                return
+
             node.cost = new_cost
             node.time = new_time
             self.write_to_console(f"[EDIT] Node '{node_label}' -> Cost: {new_cost} | Time: {new_time}")
@@ -560,7 +597,7 @@ class PanaceaApp(ctk.CTk):
             edit_win.grab_release()
             edit_win.destroy()
 
-        ctk.CTkButton(edit_win, text="Save Changes", fg_color=self.palette["success"], hover_color="#1E8449", font=ctk.CTkFont(size=15, weight="bold"), command=save_changes).pack(pady=(30, 10))
+        ctk.CTkButton(edit_win, text="Save Changes", fg_color=self.palette["success"], hover_color=self.palette["success_hover"], font=ctk.CTkFont(size=15, weight="bold"), command=save_changes).pack(pady=(30, 10))
 
     def _on_context_prune(self, node_label: str):
         if not self.current_tree:
@@ -580,18 +617,22 @@ class PanaceaApp(ctk.CTk):
             self.write_to_console(f"[ERROR] Pruning failed: {str(e)}")
 
     def _on_context_reset(self):
-        if not self.current_tree: return
-        self.displayed_tree = None
-        self.visualizer.draw_tree(self.current_tree)
-        self.write_to_console("[RESET] Displaying original tree...")
-        
-        self.pending_modifications.append("Reset to Original")
-        self.tree_modified = True
-        self._update_stats_button_state()
+        if not self.current_xml_path: return
+        try:
+            self.current_tree = tp.parse_file(self.current_xml_path)
+            self.displayed_tree = None
+            self.visualizer.draw_tree(self.current_tree)
+            self.write_to_console("[RESET] Fully restored original tree from XML...")
+            
+            self.pending_modifications = ["Reset to Original"]
+            self.tree_modified = True
+            self._update_stats_button_state()
+        except Exception as e:
+            self.write_to_console(f"[ERROR] Reset failed: {str(e)}")
 
     def _update_stats_button_state(self):
         if self.current_tree and self.tree_modified:
-            self.btn_run_stats.configure(state="normal", fg_color=self.palette["success"], text_color="#FFFFFF")
+            self.btn_run_stats.configure(state="normal", fg_color=self.palette["success"], text_color=self.palette["text_white"])
         else:
             self.btn_run_stats.configure(state="disabled", fg_color=self.palette["surface"], text_color=self.palette["muted"])
 
