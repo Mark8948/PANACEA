@@ -284,6 +284,20 @@ class PanaceaApp(ctk.CTk):
             res_time = self._execute_prism(path_time, props_time, silent=True)
 
             if res_cost is not None and res_time is not None:
+                # === GESTIONE INFINITY E LOG ===
+                is_inf_cost = res_cost == float('inf')
+                is_inf_time = res_time == float('inf')
+
+                if is_inf_cost or is_inf_time:
+                    self.write_to_console("[WARNING] 🛡️ Valore Infinito rilevato!")
+                    self.write_to_console("           L'attacco è stato completamente neutralizzato")
+                    self.write_to_console("           dalle difese e fallisce al 100%.")
+
+                # Prepariamo le stringhe per evitare di stampare "inf" sporchi
+                cost_str = "Inf" if is_inf_cost else f"{res_cost:.2f}"
+                time_str = "Inf" if is_inf_time else f"{res_time:.2f}"
+                # =====================================
+
                 if not self.pending_modifications:
                     label = "Base"
                 elif len(self.pending_modifications) == 1:
@@ -296,7 +310,7 @@ class PanaceaApp(ctk.CTk):
                 self.pending_modifications.clear()
                 
                 self._update_stats_plot()
-                self.write_to_console(f"[SUCCESS] Results stored - Cost: {res_cost:.2f}, Time: {res_time:.2f}")
+                self.write_to_console(f"[SUCCESS] Results stored - Cost: {cost_str}, Time: {time_str}")
             else:
                 self.write_to_console("[ERROR] One or both analysis steps failed.")
                 self.tree_modified = True 
@@ -345,9 +359,18 @@ class PanaceaApp(ctk.CTk):
 
             # --- ANNOTAZIONI E STILE COMUNE ---
             for i in range(len(x)):
-                self.stats_ax_cost.annotate(f"{costs[i]:.1f}", (x[i], costs[i]), xytext=(0, 10), 
+                # Gestiamo il testo e l'altezza (Y) per evitare crash su "inf"
+                c_val, t_val = costs[i], times[i]
+                c_txt = "Inf" if c_val == float('inf') else f"{c_val:.1f}"
+                t_txt = "Inf" if t_val == float('inf') else f"{t_val:.1f}"
+                
+                # Se è infinito, posizioniamo la label provvisoriamente a quota 0 (l'asse Y lo taglierà o lo posizionerà al limite)
+                c_y = 0 if c_val == float('inf') else c_val
+                t_y = 0 if t_val == float('inf') else t_val
+
+                self.stats_ax_cost.annotate(c_txt, (x[i], c_y), xytext=(0, 10), 
                                        textcoords="offset points", color='#3498DB', weight='bold', ha='center')
-                self.stats_ax_time.annotate(f"{times[i]:.1f}", (x[i], times[i]), xytext=(0, 10), 
+                self.stats_ax_time.annotate(t_txt, (x[i], t_y), xytext=(0, 10), 
                                        textcoords="offset points", color='#E74C3C', weight='bold', ha='center')
 
             for ax in [self.stats_ax_cost, self.stats_ax_time]:
@@ -360,12 +383,20 @@ class PanaceaApp(ctk.CTk):
             self.stats_ax_time.set_xticklabels(labels, fontsize=9, color=self.palette["text"])
 
             for ax, vals in [(self.stats_ax_cost, costs), (self.stats_ax_time, times)]:
-                v_min, v_max = min(vals), max(vals)
+                # --- FIX LIMITI Y ---
+                # Rimuoviamo temporaneamente i float('inf') per calcolare un range visivo valido
+                valid_vals = [v for v in vals if v != float('inf')]
+                if not valid_vals:
+                    valid_vals = [10]  # Fallback se la history è composta SOLO da run fallite (inf)
+                
+                v_min, v_max = min(valid_vals), max(valid_vals)
                 v_range = v_max - v_min if v_max > v_min else (v_max * 0.2 if v_max > 0 else 10)
                 if v_range == 0: 
                     v_range = 10
                 
                 ax.set_ylim(max(0, v_min - v_range * 0.2), v_max + v_range * 0.4)
+                # --------------------
+
                 if len(x) == 1:
                     ax.set_xlim(-0.5, 0.5)
 
@@ -490,9 +521,19 @@ class PanaceaApp(ctk.CTk):
                 self.write_to_console(f"[ERROR] Engine returned code {process.returncode}:\n{stderr.strip()}")
                 return None
 
-            match = re.search(r"Result:\s*([\d\.]+)", stdout)
+            match = re.search(r"Result:\s*([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?|Infinity|infinity|NaN)", stdout, re.IGNORECASE)
+            
             if match:
-                result_value = float(match.group(1))
+                res_str = match.group(1)
+                
+                # Se l'attacco è impossibile, PRISM restituisce Infinity
+                if res_str.lower() in ['infinity', '+infinity']:
+                    result_value = float('inf')
+                elif res_str.lower() == 'nan':
+                    result_value = float('nan')
+                else:
+                    result_value = float(res_str)
+                    
                 if not silent:
                     self.write_to_console("--- ANALYSIS RESULT ---")
                     self.write_to_console(f"Computed Value: {result_value}")
