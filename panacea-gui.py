@@ -344,16 +344,16 @@ class PanaceaApp(ctk.CTk):
             plot_times = [t if t != float('inf') else time_cap for t in times]
 
             # --- COST PLOT ---
-            self.stats_ax_cost.plot(x, plot_costs, marker='o', linewidth=2.5, color='#3498DB')
-            self.stats_ax_cost.set_title("Attack Cost Evolution", color='#3498DB', fontsize=12, pad=10)
-            self.stats_ax_cost.set_ylabel("Cost", color='#3498DB', fontsize=10, fontweight='bold')
-            self.stats_ax_cost.tick_params(axis='y', labelcolor='#3498DB')
+            self.stats_ax_cost.plot(x, plot_costs, marker='o', linewidth=2.5, color=self.palette["chart_cost"])
+            self.stats_ax_cost.set_title("Attack Cost Evolution", color=self.palette["chart_cost"], fontsize=12, pad=10)
+            self.stats_ax_cost.set_ylabel("Cost", color=self.palette["chart_cost"], fontsize=10, fontweight='bold')
+            self.stats_ax_cost.tick_params(axis='y', labelcolor=self.palette["chart_cost"])
             
             # --- TIME PLOT ---
-            self.stats_ax_time.plot(x, plot_times, marker='s', linewidth=2.5, color='#E74C3C')
-            self.stats_ax_time.set_title("Attack Time Evolution", color='#E74C3C', fontsize=12, pad=10)
-            self.stats_ax_time.set_ylabel("Time", color='#E74C3C', fontsize=10, fontweight='bold')
-            self.stats_ax_time.tick_params(axis='y', labelcolor='#E74C3C')
+            self.stats_ax_time.plot(x, plot_times, marker='s', linewidth=2.5, color=self.palette["chart_time"])
+            self.stats_ax_time.set_title("Attack Time Evolution", color=self.palette["chart_time"], fontsize=12, pad=10)
+            self.stats_ax_time.set_ylabel("Time", color=self.palette["chart_time"], fontsize=10, fontweight='bold')
+            self.stats_ax_time.tick_params(axis='y', labelcolor=self.palette["chart_time"])
 
             # --- ANNOTATIONS AND COMMON STYLE ---
             for i in range(len(x)):
@@ -361,9 +361,9 @@ class PanaceaApp(ctk.CTk):
                 t_lbl = "INF" if times[i] == float('inf') else f"{times[i]:.1f}"
 
                 self.stats_ax_cost.annotate(c_lbl, (x[i], plot_costs[i]), xytext=(0, 10), 
-                                       textcoords="offset points", color='#3498DB', weight='bold', ha='center')
+                                       textcoords="offset points", color=self.palette["chart_cost"], weight='bold', ha='center')
                 self.stats_ax_time.annotate(t_lbl, (x[i], plot_times[i]), xytext=(0, 10), 
-                                       textcoords="offset points", color='#E74C3C', weight='bold', ha='center')
+                                       textcoords="offset points", color=self.palette["chart_time"], weight='bold', ha='center')
 
             for ax in [self.stats_ax_cost, self.stats_ax_time]:
                 ax.set_xticks(x)
@@ -597,7 +597,7 @@ class PanaceaApp(ctk.CTk):
             edit_win.grab_release()
             edit_win.destroy()
 
-        ctk.CTkButton(edit_win, text="Save Changes", fg_color=self.palette["success"], hover_color="#1E8449", font=ctk.CTkFont(size=15, weight="bold"), command=save_changes).pack(pady=(30, 10))
+        ctk.CTkButton(edit_win, text="Save Changes", fg_color=self.palette["success"], hover_color=self.palette["success_hover"], font=ctk.CTkFont(size=15, weight="bold"), command=save_changes).pack(pady=(30, 10))
 
     def _on_context_prune(self, node_label: str):
         if not self.current_tree:
@@ -632,7 +632,7 @@ class PanaceaApp(ctk.CTk):
 
     def _update_stats_button_state(self):
         if self.current_tree and self.tree_modified:
-            self.btn_run_stats.configure(state="normal", fg_color=self.palette["success"], text_color="#FFFFFF")
+            self.btn_run_stats.configure(state="normal", fg_color=self.palette["success"], text_color=self.palette["text_white"])
         else:
             self.btn_run_stats.configure(state="disabled", fg_color=self.palette["surface"], text_color=self.palette["muted"])
 

@@ -27,13 +27,9 @@ import numpy as np
 if "gui.palette" in sys.modules:
     importlib.reload(sys.modules["gui.palette"])
 
-from gui.palette import TREE_VISUALIZER_PALETTE as TVP
+from gui.palette import PALETTE
 
-try:
-    from gui.palette import PALETTE
-    APP_BG = PALETTE.get("bg", "#0E1621")
-except Exception:
-    APP_BG = "#0E1621"
+APP_BG = PALETTE.get("bg", "#0E1621")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -58,21 +54,20 @@ def _node_radius(label: str) -> float:
     return 0.085
 
 
-def _get_color(key: str, default: str = "#CCCCCC") -> str:
+def _get_color(key: str, default: str = None) -> str:
     """
     Safely retrieves a color hex code from the palette.
 
     Args:
         key (str): The dictionary key for the requested color.
-        default (str, optional): Fallback color if the key is not found. Defaults to "#CCCCCC".
+        default (str, optional): Fallback color if the key is not found.
 
     Returns:
         str: The hex color code.
     """
-    try:
-        return TVP.get(key, default)
-    except Exception:
-        return default
+    if default is None:
+        default = PALETTE.get("fallback_default", "#CCCCCC")
+    return PALETTE.get(key, default)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -270,7 +265,7 @@ class TreeVisualizer:
         # Draw the visible background grid
         gx = np.arange(round(x_lo, 1), x_hi + 0.05, 0.1)
         gy = np.arange(round(y_lo, 1), y_hi + 0.05, 0.1)
-        grid_color = _get_color("grid", "#1C2B3A")
+        grid_color = _get_color("grid")
         for gxi in gx:
             for gyi in gy:
                 ax.plot(gxi, gyi, ".", color=grid_color, markersize=1, zorder=0, alpha=0.35)
@@ -284,7 +279,7 @@ class TreeVisualizer:
             x1, y1 = pos[v]
 
             target_role = role.get(v, "Attacker")
-            color = _get_color("edge_dashed", "#5D9CEC") if target_role == "Defender" else _get_color("edge_solid", "#7F8C8D")
+            color = _get_color("edge_dashed") if target_role == "Defender" else _get_color("edge_solid")
             lstyle = "--" if target_role == "Defender" else "-"
 
             ann = ax.annotate(
@@ -309,7 +304,7 @@ class TreeVisualizer:
                 txt = ax.text(
                     mx, my, action,
                     fontsize=7,
-                    color=_get_color("edge_label", "#BDC3C7"),
+                    color=_get_color("edge_label"),
                     ha="center", va="center", zorder=3,
                     bbox=dict(
                         boxstyle="round,pad=0.22",
@@ -327,9 +322,9 @@ class TreeVisualizer:
             r = _node_radius(label)
             is_def = role.get(label, "Attacker") == "Defender"
 
-            fill_c = _get_color("defender", "#1E8449") if is_def else _get_color("attacker", "#C0392B")
-            border_c = _get_color("defender_border", "#27AE60") if is_def else _get_color("attacker_border", "#E74C3C")
-            glow_c = _get_color("defender_glow", "#27AE60") if is_def else _get_color("attacker_glow", "#E74C3C")
+            fill_c = _get_color("defender") if is_def else _get_color("attacker")
+            border_c = _get_color("defender_border") if is_def else _get_color("attacker_border")
+            glow_c = _get_color("defender_glow") if is_def else _get_color("attacker_glow")
 
             glow1 = mpatches.Circle((x, y), r + 0.022, color=glow_c, alpha=0.14, zorder=2)
             glow2 = mpatches.Circle((x, y), r + 0.010, color=glow_c, alpha=0.28, zorder=2)
@@ -345,7 +340,7 @@ class TreeVisualizer:
             node_txt = ax.text(
                 x, y, wrapped,
                 fontsize=8, fontweight="bold",
-                color=_get_color("node_text", "#FFFFFF"),
+                color=_get_color("node_text"),
                 ha="center", va="center", zorder=5,
                 multialignment="center",
             )
@@ -355,15 +350,15 @@ class TreeVisualizer:
                 'glow1': glow1, 'glow2': glow2, 'fill': fill, 'border': border, 'text': node_txt
             }
 
-        att_patch = mpatches.Patch(color=_get_color("attacker", "#C0392B"), label="Attacker")
-        def_patch = mpatches.Patch(color=_get_color("defender", "#1E8449"), label="Defender")
+        att_patch = mpatches.Patch(color=_get_color("attacker"), label="Attacker")
+        def_patch = mpatches.Patch(color=_get_color("defender"), label="Defender")
         ax.legend(
             handles=[att_patch, def_patch],
             loc="upper right",
             framealpha=0.35,
             facecolor=APP_BG,
-            edgecolor=_get_color("edge_solid", "#7F8C8D"),
-            labelcolor=_get_color("node_text", "#FFFFFF"),
+            edgecolor=_get_color("edge_solid"),
+            labelcolor=_get_color("node_text"),
             fontsize=9,
         )
 
@@ -774,10 +769,10 @@ class TreeVisualizer:
         menu = tk.Menu(
             self.master_frame,
             tearoff=0,
-            bg=_get_color("menu_bg", "#1A2A3D"),
-            fg=_get_color("menu_fg", "#F6F8FB"),
-            activebackground=_get_color("menu_active_bg", "#2F80ED"),
-            activeforeground=_get_color("menu_active_fg", "#FFFFFF"),
+            bg=_get_color("menu_bg"),
+            fg=_get_color("menu_fg"),
+            activebackground=_get_color("menu_active_bg"),
+            activeforeground=_get_color("menu_active_fg"),
             font=("Segoe UI", 11),
             bd=0,
             relief="flat",
