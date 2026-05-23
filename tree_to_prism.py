@@ -394,11 +394,11 @@ def save_prism_properties(file):
     with open(file, 'w') as f:
         
         # property 1 - attacker minimizes the cost
-        f.write(' Minimum cost for the attacker\n')
+        f.write('// Minimum cost for the attacker\n')
         f.write('<<attacker>>R{"attacker"}min=? [ F "terminate" ]\n')
 
         # property 2 - defender minimizes the cost
-        f.write(' Minimum cost for the defender\n')
+        f.write('// Minimum cost for the defender\n')
         f.write('<<defender>>R{"defender"}min=? [ F "terminate" ]\n')
 
         f.close()
