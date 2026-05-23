@@ -392,6 +392,13 @@ def save_prism_model(prism_model, file):
     
 def save_prism_properties(file):
     with open(file, 'w') as f:
-        f.write('// Each agent tries to get the minimum expected cost to reach a terminate state\n')
-        f.write('<<attacker,defender>>R{"attacker"}min=? [ F "terminate" ] + R{"defender"}min=? [ F "deadlock" ]\n')
+        
+        # property 1 - attacker minimizes the cost
+        f.write(' Minimum cost for the attacker\n')
+        f.write('<<attacker>>R{"attacker"}min=? [ F "terminate" ]\n')
+
+        # property 2 - defender minimizes the cost
+        f.write(' Minimum cost for the defender\n')
+        f.write('<<defender>>R{"defender"}min=? [ F "terminate" ]\n')
+
         f.close()
