@@ -265,25 +265,27 @@ class PanaceaApp(ctk.CTk):
         temp_dir = tempfile.gettempdir()
 
         try:
-            # 1. RUN COST ANALYSIS (attacker + defender via 2 properties)
+            # 1. RUN COST ANALYSIS
             self.write_to_console("[STATS] Step 1/2: Calculating Attacker & Defender Cost...")
             prism_model_cost = tp.get_prism_model(tree_to_run)
             path_cost = os.path.join(temp_dir, "panacea_cost.prism")
             tp.save_prism_model(prism_model_cost, path_cost)
 
             props_cost = os.path.join(temp_dir, "panacea_cost.props")
-            tp.save_prism_properties(props_cost)
+            # PASSAGGIO DEL MODE "cost"
+            tp.save_prism_properties(props_cost, mode="cost")
 
             res_costs = self._execute_prism_multi(path_cost, props_cost, silent=True)
 
-            # 2. RUN TIME ANALYSIS (attacker + defender via 2 properties)
+            # 2. RUN TIME ANALYSIS
             self.write_to_console("[STATS] Step 2/2: Calculating Attacker & Defender Time...")
             prism_model_time = tp.get_prism_model_time(tree_to_run)
             path_time = os.path.join(temp_dir, "panacea_time.prism")
             tp.save_prism_model(prism_model_time, path_time)
 
             props_time = os.path.join(temp_dir, "panacea_time.props")
-            tp.save_prism_properties(props_time)
+            # PASSAGGIO DEL MODE "time"
+            tp.save_prism_properties(props_time, mode="time")
 
             res_times = self._execute_prism_multi(path_time, props_time, silent=True)
 

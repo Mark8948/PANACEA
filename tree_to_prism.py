@@ -161,7 +161,8 @@ def get_prism_model(tree):
         text += ", " + ", ".join(att_actions)
     text += "\nendplayer\n"
 
-    text += "player defender\n\tdefender"
+    # FIX: Aggiunto [passD] ai comandi disponibili per il player defender
+    text += "player defender\n\tdefender, [passD]"
     def_actions = [f"[{a}]" for a in defender_actions.keys()]
     if def_actions:
         text += ", " + ", ".join(def_actions)
@@ -233,6 +234,10 @@ def get_prism_model(tree):
                     text += f"{p}=1 {refinement} "
                 text = f"{text[:-3]})"
             text += f" -> ({effect}'=2) & (sched'=1);\n"
+            
+    # FIX: Azione di "salto turno" per evitare che l'attaccante prenda un INF se il difensore non può muovere
+    text += "\n\t// Azione per passare il turno se non ci sono difese attivabili\n"
+    text += "\t[passD] sched=2 -> (sched'=1);\n"
         
     text += '\nendmodule\n\nrewards "attacker"\n\n'
 
@@ -371,34 +376,30 @@ def get_prism_model_time(tree):
         
     text += '\nendmodule\n\nrewards "attacker"\n\n'
 
+    # FIX: Lettura di ['time'] al posto di ['cost'] per calcolare l'asse del tempo dell'attaccante
     for a in attacker_actions.keys():
-        text += f"\t[start{a}] true : {attacker_actions[a]['cost']};\n"
+        text += f"\t[start{a}] true : {attacker_actions[a]['time']};\n"
         
     text += '\nendrewards\n\nrewards "defender"\n\n'
 
+    # FIX: Lettura di ['time'] al posto di ['cost'] per calcolare l'asse del tempo del difensore
     for a in actions_to_goal:
-        text += f"\t[end{a}] true : {int(attacker_actions[a]['cost'])*10};\n"
+        text += f"\t[end{a}] true : {int(attacker_actions[a]['time'])*10};\n"
     for a in defender_actions.keys():
-        text += f"\t[start{a}] true : {defender_actions[a]['cost']};\n"
+        text += f"\t[start{a}] true : {defender_actions[a]['time']};\n"
           
     text += "\nendrewards"
 
     return text
-
 def save_prism_model(prism_model, file):
     with open(file, 'w') as f:
         f.write(prism_model)
         f.close()
     
-def save_prism_properties(file):
+def save_prism_properties(file, mode="cost"):
     with open(file, 'w') as f:
-        
-        # property 1 - attacker minimizes the cost
-        f.write('// Minimum cost for the attacker\n')
-        f.write('<<attacker>>R{"attacker"}min=? [ F "terminate" ]\n')
+        f.write('// Minimum expected value for the attacker\n')
+        f.write('<<attacker>>R{"attacker"}min=? [ F "terminate" ];\n\n')
 
-        # property 2 - defender minimizes the cost
-        f.write('// Minimum cost for the defender\n')
-        f.write('<<defender>>R{"defender"}min=? [ F "terminate" ]\n')
-
-        f.close()
+        f.write('// Minimum expected value for the defender\n')
+        f.write('<<defender>>R{"defender"}min=? [ F "deadlock" ];\n')
