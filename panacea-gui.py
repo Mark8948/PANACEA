@@ -196,6 +196,7 @@ class PanaceaApp(ctk.CTk):
         self.visualizer = TreeVisualizer(self.graph_container, on_prune=self._on_context_prune, on_reset=self._on_context_reset, on_edit=self._on_context_edit)
 
     def setup_stats_tab(self):
+
         self.tab_stats.grid_columnconfigure(0, weight=0)
         self.tab_stats.grid_columnconfigure(1, weight=1)
         self.tab_stats.grid_rowconfigure(0, weight=1)
@@ -204,11 +205,11 @@ class PanaceaApp(ctk.CTk):
         ctrl_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 20), pady=10)
 
         ctk.CTkLabel(ctrl_frame, text="Trade-off Analysis", font=ctk.CTkFont(size=20, weight="bold"), text_color=self.palette["text"]).pack(anchor="w", pady=(0, 10))
-        ctk.CTkLabel(ctrl_frame, text="Automatically calculates both\nAttack Cost and Execution Time\nto visualize security impact.", font=ctk.CTkFont(size=13), text_color=self.palette["muted"], justify="left").pack(anchor="w", pady=(0, 20))
+        ctk.CTkLabel(ctrl_frame, text="Calcola separatamente\nCosto e Tempo per\nAttaccante e Difensore.", font=ctk.CTkFont(size=13), text_color=self.palette["muted"], justify="left").pack(anchor="w", pady=(0, 20))
 
         self.btn_run_stats = ctk.CTkButton(
-            ctrl_frame, text="Run Dual Analysis", 
-            image=self.icons["generate"], compound="left", 
+            ctrl_frame, text="Run Dual Analysis",
+            image=self.icons["generate"], compound="left",
             height=50, corner_radius=self.btn_radius,
             fg_color=self.palette["surface"], text_color=self.palette["muted"],
             state="disabled", command=self.run_stats_analysis
@@ -216,7 +217,7 @@ class PanaceaApp(ctk.CTk):
         self.btn_run_stats.pack(fill="x", pady=(0, 20))
 
         self.btn_clear_history = ctk.CTkButton(
-            ctrl_frame, text="Reset Plot", 
+            ctrl_frame, text="Reset Plot",
             image=self.icons["clear"], compound="left",
             height=32, corner_radius=self.btn_radius,
             fg_color="transparent", hover_color=self.palette["danger"],
@@ -228,13 +229,16 @@ class PanaceaApp(ctk.CTk):
         self.plot_frame = ctk.CTkFrame(self.tab_stats, fg_color=self.palette["card"], corner_radius=self.ui_radius, border_width=1, border_color=self.palette["border"])
         self.plot_frame.grid(row=0, column=1, sticky="nsew", pady=10)
 
-        self.stats_fig = Figure(figsize=(8, 6), dpi=100)
+        self.stats_fig = Figure(figsize=(8, 8), dpi=100)
         self.stats_fig.patch.set_facecolor(self.palette["card"])
-        
-        self.stats_ax_cost: Axes = self.stats_fig.add_subplot(211)  # type: ignore
-        self.stats_ax_time: Axes = self.stats_fig.add_subplot(212, sharex=self.stats_ax_cost)  # type: ignore
 
-        for ax in [self.stats_ax_cost, self.stats_ax_time]:
+        self.stats_ax_att_cost: Axes = self.stats_fig.add_subplot(221)   # type: ignore
+        self.stats_ax_def_cost: Axes = self.stats_fig.add_subplot(222)   # type: ignore
+        self.stats_ax_att_time: Axes = self.stats_fig.add_subplot(223)   # type: ignore
+        self.stats_ax_def_time: Axes = self.stats_fig.add_subplot(224)   # type: ignore
+
+        for ax in [self.stats_ax_att_cost, self.stats_ax_def_cost,
+                self.stats_ax_att_time, self.stats_ax_def_time]:
             ax.set_facecolor(self.palette["card"])
             ax.tick_params(colors=self.palette["text"])
             for spine in ax.spines.values():
@@ -244,15 +248,16 @@ class PanaceaApp(ctk.CTk):
         self.stats_canvas.get_tk_widget().pack(fill="both", expand=True, padx=10, pady=10)
         self._update_stats_plot()
 
+
     # --- CORE ANALYSIS LOGIC ---
 
     def run_stats_analysis(self):
-        """Runs dual background verification (Cost and Time) and updates the visual plot."""
+        """Runs dual background verification (Cost and Time, Attacker and Defender) and updates the visual plot."""
         if not self.tree_modified or not self.current_tree:
             return
 
         self.write_to_console("--- DUAL ANALYSIS STARTED ---")
-        
+
         self.tree_modified = False
         self._update_stats_button_state()
 
@@ -261,28 +266,33 @@ class PanaceaApp(ctk.CTk):
 
         try:
             # 1. RUN COST ANALYSIS
-            self.write_to_console("[STATS] Step 1/2: Calculating Attack Cost...")
+            self.write_to_console("[STATS] Step 1/2: Calculating Attacker & Defender Cost...")
             prism_model_cost = tp.get_prism_model(tree_to_run)
             path_cost = os.path.join(temp_dir, "panacea_cost.prism")
             tp.save_prism_model(prism_model_cost, path_cost)
-            
+
             props_cost = os.path.join(temp_dir, "panacea_cost.props")
-            tp.save_prism_properties(props_cost)
-            
-            res_cost = self._execute_prism(path_cost, props_cost, silent=True)
+            # PASSAGGIO DEL MODE "cost"
+            tp.save_prism_properties(props_cost, mode="cost")
+
+            res_costs = self._execute_prism_multi(path_cost, props_cost, silent=True)
 
             # 2. RUN TIME ANALYSIS
-            self.write_to_console("[STATS] Step 2/2: Calculating Attack Time...")
+            self.write_to_console("[STATS] Step 2/2: Calculating Attacker & Defender Time...")
             prism_model_time = tp.get_prism_model_time(tree_to_run)
             path_time = os.path.join(temp_dir, "panacea_time.prism")
             tp.save_prism_model(prism_model_time, path_time)
-            
-            props_time = os.path.join(temp_dir, "panacea_time.props")
-            tp.save_prism_properties(props_time)
-            
-            res_time = self._execute_prism(path_time, props_time, silent=True)
 
-            if res_cost is not None and res_time is not None:
+            props_time = os.path.join(temp_dir, "panacea_time.props")
+            # PASSAGGIO DEL MODE "time"
+            tp.save_prism_properties(props_time, mode="time")
+
+            res_times = self._execute_prism_multi(path_time, props_time, silent=True)
+
+            if res_costs is not None and res_times is not None:
+                att_cost, def_cost = res_costs
+                att_time, def_time = res_times
+
                 if not self.pending_modifications:
                     label = "Base"
                 elif len(self.pending_modifications) == 1:
@@ -291,18 +301,19 @@ class PanaceaApp(ctk.CTk):
                     label = f"{len(self.pending_modifications)} changes"
 
                 run_count = len(self.run_history) + 1
-                self.run_history.append((f"Run {run_count}\n({label})", res_cost, res_time))
+                self.run_history.append((f"Run {run_count}\n({label})", att_cost, def_cost, att_time, def_time))
                 self.pending_modifications.clear()
-                
+
                 self._update_stats_plot()
-                
-                if res_cost == float('inf') or res_time == float('inf'):
-                    self.write_to_console("[SUCCESS] Results stored - Attack blocked (INF)")
-                else:
-                    self.write_to_console(f"[SUCCESS] Results stored - Cost: {res_cost:.2f}, Time: {res_time:.2f}")
+
+                def fmt(v): return "INF" if v == float('inf') else f"{v:.2f}"
+                self.write_to_console(
+                    f"[SUCCESS] Att.Cost: {fmt(att_cost)} | Def.Cost: {fmt(def_cost)} | "
+                    f"Att.Time: {fmt(att_time)} | Def.Time: {fmt(def_time)}"
+                )
             else:
                 self.write_to_console("[ERROR] One or both analysis steps failed.")
-                self.tree_modified = True 
+                self.tree_modified = True
                 self._update_stats_button_state()
 
         except Exception as e:
@@ -313,84 +324,93 @@ class PanaceaApp(ctk.CTk):
         self.write_to_console("--- DUAL ANALYSIS COMPLETED ---")
 
     def _update_stats_plot(self):
-        """Redraws the analysis chart using two completely separate subplots."""
-        self.stats_ax_cost.cla()
-        self.stats_ax_time.cla()
-
-        for ax in [self.stats_ax_cost, self.stats_ax_time]:
+        """Redraws the 4-panel analysis chart: Attacker Cost, Defender Cost, Attacker Time, Defender Time."""
+        for ax in [self.stats_ax_att_cost, self.stats_ax_def_cost,
+                self.stats_ax_att_time, self.stats_ax_def_time]:
+            ax.cla()
             ax.set_facecolor(self.palette["card"])
             ax.tick_params(colors=self.palette["text"])
 
         if not self.run_history:
-            self.stats_ax_cost.text(0.5, 0.5, "Chart empty. Modify the tree and run analysis.", 
-                               ha='center', va='center', color=self.palette["muted"])
-            self.stats_ax_cost.set_xticks([])
-            self.stats_ax_cost.set_yticks([])
-            self.stats_ax_time.set_visible(False) 
+            self.stats_ax_att_cost.text(0.5, 0.5, "Chart empty.\nModifica l'albero e avvia l'analisi.",
+                                        ha='center', va='center', color=self.palette["muted"], fontsize=10)
+            for ax in [self.stats_ax_att_cost, self.stats_ax_def_cost,
+                    self.stats_ax_att_time, self.stats_ax_def_time]:
+                ax.set_xticks([])
+                ax.set_yticks([])
         else:
-            self.stats_ax_time.set_visible(True)
-            labels = [h[0] for h in self.run_history]
-            costs = [h[1] for h in self.run_history]
-            times = [h[2] for h in self.run_history]
-            x = list(range(len(costs)))
+            labels      = [h[0] for h in self.run_history]
+            att_costs   = [h[1] for h in self.run_history]
+            def_costs   = [h[2] for h in self.run_history]
+            att_times   = [h[3] for h in self.run_history]
+            def_times   = [h[4] for h in self.run_history]
+            x = list(range(len(labels)))
 
-            # Clean values for plotting to avoid matplotlib crash on inf
-            finite_costs = [c for c in costs if c != float('inf')]
-            cost_cap = max(finite_costs) * 1.3 if finite_costs else 100
-            plot_costs = [c if c != float('inf') else cost_cap for c in costs]
+            def _cap(values):
+                finite = [v for v in values if v != float('inf')]
+                return max(finite) * 1.3 if finite else 100.0
 
-            finite_times = [t for t in times if t != float('inf')]
-            time_cap = max(finite_times) * 1.3 if finite_times else 100
-            plot_times = [t if t != float('inf') else time_cap for t in times]
+            att_cost_cap = _cap(att_costs)
+            def_cost_cap = _cap(def_costs)
+            att_time_cap = _cap(att_times)
+            def_time_cap = _cap(def_times)
 
-            # --- COST PLOT ---
-            self.stats_ax_cost.plot(x, plot_costs, marker='o', linewidth=2.5, color=self.palette["chart_cost"])
-            self.stats_ax_cost.set_title("Attack Cost Evolution", color=self.palette["chart_cost"], fontsize=12, pad=10)
-            self.stats_ax_cost.set_ylabel("Cost", color=self.palette["chart_cost"], fontsize=10, fontweight='bold')
-            self.stats_ax_cost.tick_params(axis='y', labelcolor=self.palette["chart_cost"])
-            
-            # --- TIME PLOT ---
-            self.stats_ax_time.plot(x, plot_times, marker='s', linewidth=2.5, color=self.palette["chart_time"])
-            self.stats_ax_time.set_title("Attack Time Evolution", color=self.palette["chart_time"], fontsize=12, pad=10)
-            self.stats_ax_time.set_ylabel("Time", color=self.palette["chart_time"], fontsize=10, fontweight='bold')
-            self.stats_ax_time.tick_params(axis='y', labelcolor=self.palette["chart_time"])
+            def _plot_vals(values, cap):
+                return [v if v != float('inf') else cap for v in values]
 
-            # --- ANNOTATIONS AND COMMON STYLE ---
-            for i in range(len(x)):
-                c_lbl = "INF" if costs[i] == float('inf') else f"{costs[i]:.1f}"
-                t_lbl = "INF" if times[i] == float('inf') else f"{times[i]:.1f}"
+            plot_att_costs = _plot_vals(att_costs, att_cost_cap)
+            plot_def_costs = _plot_vals(def_costs, def_cost_cap)
+            plot_att_times = _plot_vals(att_times, att_time_cap)
+            plot_def_times = _plot_vals(def_times, def_time_cap)
 
-                self.stats_ax_cost.annotate(c_lbl, (x[i], plot_costs[i]), xytext=(0, 10), 
-                                       textcoords="offset points", color=self.palette["chart_cost"], weight='bold', ha='center')
-                self.stats_ax_time.annotate(t_lbl, (x[i], plot_times[i]), xytext=(0, 10), 
-                                       textcoords="offset points", color=self.palette["chart_time"], weight='bold', ha='center')
+            color_att = self.palette["chart_cost"]
+            color_def = self.palette.get("chart_time", "#4fc3f7")
 
-            for ax in [self.stats_ax_cost, self.stats_ax_time]:
+            panels = [
+                (self.stats_ax_att_cost, plot_att_costs, att_costs, att_cost_cap, color_att, "Attacker Cost",  "o"),
+                (self.stats_ax_def_cost, plot_def_costs, def_costs, def_cost_cap, color_def, "Defender Cost",  "s"),
+                (self.stats_ax_att_time, plot_att_times, att_times, att_time_cap, color_att, "Attacker Time",  "o"),
+                (self.stats_ax_def_time, plot_def_times, def_times, def_time_cap, color_def, "Defender Time",  "s"),
+            ]
+
+            for ax, plot_vals, raw_vals, cap, color, title, marker in panels:
+                ax.plot(x, plot_vals, marker=marker, linewidth=2.5, color=color)
+                ax.set_title(title, color=color, fontsize=11, pad=8)
+                ax.set_ylabel(title.split()[1], color=color, fontsize=9, fontweight='bold')
+                ax.tick_params(axis='y', labelcolor=color)
                 ax.set_xticks(x)
                 ax.grid(True, alpha=0.15, linestyle='--', color=self.palette["text"])
                 ax.spines['top'].set_visible(False)
                 ax.spines['right'].set_visible(False)
-            
-            self.stats_ax_cost.set_xticklabels([])
-            self.stats_ax_time.set_xticklabels(labels, fontsize=9, color=self.palette["text"])
 
-            for ax, vals, cap in [(self.stats_ax_cost, finite_costs, cost_cap), (self.stats_ax_time, finite_times, time_cap)]:
-                if not vals:
+                for i in range(len(x)):
+                    lbl = "INF" if raw_vals[i] == float('inf') else f"{raw_vals[i]:.1f}"
+                    ax.annotate(lbl, (x[i], plot_vals[i]), xytext=(0, 8),
+                                textcoords="offset points", color=color,
+                                weight='bold', ha='center', fontsize=8)
+
+                finite_vals = [v for v in raw_vals if v != float('inf')]
+                if finite_vals:
+                    v_min, v_max = min(finite_vals), max(finite_vals)
+                    if float('inf') in raw_vals:
+                        v_max = cap
+                    v_range = (v_max - v_min) if v_max > v_min else (v_max * 0.2 if v_max > 0 else 10)
+                    if v_range == 0:
+                        v_range = 10
+                    ax.set_ylim(max(0, v_min - v_range * 0.2), v_max + v_range * 0.4)
+                else:
                     ax.set_ylim(0, cap * 1.5)
-                    continue
-                v_min, v_max = min(vals), max(vals)
-                if float('inf') in (costs if ax == self.stats_ax_cost else times):
-                    v_max = cap
-                
-                v_range = v_max - v_min if v_max > v_min else (v_max * 0.2 if v_max > 0 else 10)
-                if v_range == 0: 
-                    v_range = 10
-                
-                ax.set_ylim(max(0, v_min - v_range * 0.2), v_max + v_range * 0.4)
+
                 if len(x) == 1:
                     ax.set_xlim(-0.5, 0.5)
 
-            self.stats_fig.subplots_adjust(hspace=0.35, bottom=0.15, right=0.95, left=0.1)
+            # X tick labels solo sui subplot inferiori
+            self.stats_ax_att_cost.set_xticklabels([])
+            self.stats_ax_def_cost.set_xticklabels([])
+            self.stats_ax_att_time.set_xticklabels(labels, fontsize=8, color=self.palette["text"])
+            self.stats_ax_def_time.set_xticklabels(labels, fontsize=8, color=self.palette["text"])
+
+            self.stats_fig.subplots_adjust(hspace=0.45, wspace=0.35, bottom=0.12, right=0.96, left=0.08, top=0.94)
 
         self.stats_canvas.draw()
 
@@ -491,25 +511,29 @@ class PanaceaApp(ctk.CTk):
         
         try:
             is_windows = platform.system() == "Windows"
-            command = [prism_exec, model_path, props_path]
-            
             prism_bin_dir = os.path.dirname(prism_exec)
+            
+            # FIX WINDOWS: Passaggio degli argomenti come singola stringa testuale con virgolette
+            if is_windows:
+                command = f'"{prism_exec}" "{model_path}" "{props_path}"'
+            else:
+                command = [prism_exec, model_path, props_path]
 
             process = subprocess.Popen(
                 command, 
                 stdout=subprocess.PIPE, 
-                stderr=subprocess.PIPE, 
+                stderr=subprocess.STDOUT,  # FIX: Unisce STDERR e STDOUT per catturare i crash Java
                 text=True, 
                 shell=is_windows, 
                 cwd=prism_bin_dir
             )
-            stdout, stderr = process.communicate()
+            stdout, _ = process.communicate()
             
             if process.returncode != 0:
-                self.write_to_console(f"[ERROR] Engine returned code {process.returncode}:\n{stderr.strip()}")
+                detailed_error = stdout.strip() if stdout else "NO OUTPUT FROM ENGINE. (Check Java or Prism Path)"
+                self.write_to_console(f"[ERROR] Engine returned code {process.returncode}:\n{detailed_error}")
                 return None
 
-            # Fix: Regex for tracking Infinity and general numbers
             match = re.search(r"Result:\s*([a-zA-Z\d\.]+)", stdout)
             if match:
                 val_str = match.group(1)
@@ -533,6 +557,59 @@ class PanaceaApp(ctk.CTk):
             self.write_to_console(f"[CRITICAL] Execution error: {str(e)}")
             return None
 
+    def _execute_prism_multi(self, model_path: str, props_path: str, silent: bool = False) -> Optional[Tuple[float, float]]:
+        """Executes PRISM and returns TWO results (e.g. attacker + defender) as a tuple."""
+        prism_exec = self._get_prism_cmd()
+        if not prism_exec:
+            return None
+
+        if not silent:
+            self.write_to_console("[PROCESS] Launching PRISM-games engine (multi-result)...")
+
+        try:
+            is_windows = platform.system() == "Windows"
+            prism_bin_dir = os.path.dirname(prism_exec)
+
+            # FIX WINDOWS: Passaggio degli argomenti come singola stringa testuale con virgolette
+            if is_windows:
+                command = f'"{prism_exec}" "{model_path}" "{props_path}"'
+            else:
+                command = [prism_exec, model_path, props_path]
+
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,  # FIX: Unisce STDERR e STDOUT per catturare i crash Java
+                text=True,
+                shell=is_windows,
+                cwd=prism_bin_dir
+            )
+            stdout, _ = process.communicate()
+
+            if process.returncode != 0:
+                detailed_error = stdout.strip() if stdout else "NO OUTPUT FROM ENGINE. (Check Java or Prism Path)"
+                self.write_to_console(f"[ERROR] Engine returned code {process.returncode}:\n{detailed_error}")
+                return None
+
+            matches = re.findall(r"Result:\s*([a-zA-Z\d\.]+)", stdout)
+            if len(matches) >= 2:
+                results = []
+                for val_str in matches[:2]:
+                    try:
+                        results.append(float(val_str))
+                    except ValueError:
+                        self.write_to_console(f"[WARNING] Unrecognized result format: {val_str}")
+                        return None
+                return (results[0], results[1])
+            else:
+                self.write_to_console(f"[WARNING] Expected 2 results from PRISM, got {len(matches)}.")
+                self.write_to_console(f"[PRISM OUTPUT]\n{stdout.strip()}")
+                return None
+
+        except Exception as e:
+            self.write_to_console(f"[CRITICAL] Execution error: {str(e)}")
+            return None
+        
     def is_positive_integer(self, value: str) -> bool:
         text = str(value).strip()
         return bool(re.fullmatch(r"[1-9][0-9]*", text))
