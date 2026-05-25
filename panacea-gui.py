@@ -511,25 +511,29 @@ class PanaceaApp(ctk.CTk):
         
         try:
             is_windows = platform.system() == "Windows"
-            command = [prism_exec, model_path, props_path]
-            
             prism_bin_dir = os.path.dirname(prism_exec)
+            
+            # FIX WINDOWS: Passaggio degli argomenti come singola stringa testuale con virgolette
+            if is_windows:
+                command = f'"{prism_exec}" "{model_path}" "{props_path}"'
+            else:
+                command = [prism_exec, model_path, props_path]
 
             process = subprocess.Popen(
                 command, 
                 stdout=subprocess.PIPE, 
-                stderr=subprocess.PIPE, 
+                stderr=subprocess.STDOUT,  # FIX: Unisce STDERR e STDOUT per catturare i crash Java
                 text=True, 
                 shell=is_windows, 
                 cwd=prism_bin_dir
             )
-            stdout, stderr = process.communicate()
+            stdout, _ = process.communicate()
             
             if process.returncode != 0:
-                self.write_to_console(f"[ERROR] Engine returned code {process.returncode}:\n{stderr.strip()}")
+                detailed_error = stdout.strip() if stdout else "NO OUTPUT FROM ENGINE. (Check Java or Prism Path)"
+                self.write_to_console(f"[ERROR] Engine returned code {process.returncode}:\n{detailed_error}")
                 return None
 
-            # Fix: Regex for tracking Infinity and general numbers
             match = re.search(r"Result:\s*([a-zA-Z\d\.]+)", stdout)
             if match:
                 val_str = match.group(1)
@@ -564,21 +568,27 @@ class PanaceaApp(ctk.CTk):
 
         try:
             is_windows = platform.system() == "Windows"
-            command = [prism_exec, model_path, props_path]
             prism_bin_dir = os.path.dirname(prism_exec)
+
+            # FIX WINDOWS: Passaggio degli argomenti come singola stringa testuale con virgolette
+            if is_windows:
+                command = f'"{prism_exec}" "{model_path}" "{props_path}"'
+            else:
+                command = [prism_exec, model_path, props_path]
 
             process = subprocess.Popen(
                 command,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stderr=subprocess.STDOUT,  # FIX: Unisce STDERR e STDOUT per catturare i crash Java
                 text=True,
                 shell=is_windows,
                 cwd=prism_bin_dir
             )
-            stdout, stderr = process.communicate()
+            stdout, _ = process.communicate()
 
             if process.returncode != 0:
-                self.write_to_console(f"[ERROR] Engine returned code {process.returncode}:\n{stderr.strip()}")
+                detailed_error = stdout.strip() if stdout else "NO OUTPUT FROM ENGINE. (Check Java or Prism Path)"
+                self.write_to_console(f"[ERROR] Engine returned code {process.returncode}:\n{detailed_error}")
                 return None
 
             matches = re.findall(r"Result:\s*([a-zA-Z\d\.]+)", stdout)
@@ -593,12 +603,13 @@ class PanaceaApp(ctk.CTk):
                 return (results[0], results[1])
             else:
                 self.write_to_console(f"[WARNING] Expected 2 results from PRISM, got {len(matches)}.")
+                self.write_to_console(f"[PRISM OUTPUT]\n{stdout.strip()}")
                 return None
 
         except Exception as e:
             self.write_to_console(f"[CRITICAL] Execution error: {str(e)}")
             return None
-
+        
     def is_positive_integer(self, value: str) -> bool:
         text = str(value).strip()
         return bool(re.fullmatch(r"[1-9][0-9]*", text))
