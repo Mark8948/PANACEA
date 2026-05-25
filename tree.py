@@ -129,45 +129,60 @@ class Tree:
         for i, parent_label in enumerate(path):
             parent_node = self.get_node(parent_label)
             
-            # If this node is conjunctive OR if this is the target node, include the entire subtree
-            if parent_node.refinement == "conjunctive" or parent_label == label:
+            # Ensure the current parent node is added to the pruned tree
+            if parent_node.label not in added_nodes:
+                pruned_tree.add_node(parent_node)
+                added_nodes.add(parent_node.label)
+                
+            # If this is the target node, include its entire subtree and terminate path traversal
+            if parent_label == label:
                 subtree = self.get_subtree(parent_label)
                 for node in subtree.nodes:
                     if node.label not in added_nodes:
                         pruned_tree.add_node(node)
                         added_nodes.add(node.label)
                 for edge in subtree.edges:
-                    pruned_tree.edges.append(edge)
-                break
+                    if edge not in pruned_tree.edges:
+                        pruned_tree.edges.append(edge)
+                break  # Successfully reached the target node
+            
+            # Determine which children to process based on the refinement type
+            if parent_node.refinement == "conjunctive":
+                # For conjunctive nodes, ALL children are strictly required to activate the parent
+                children_labels = self.get_children(parent_node)
             else:
-                # Add the current node to the pruned tree if not already added
-                if parent_label not in added_nodes:
-                    pruned_tree.add_node(parent_node)
-                    added_nodes.add(parent_label)
+                # For disjunctive nodes, only keep children on the path to the target OR Defender nodes
+                children_labels = [c for c in self.get_children(parent_node) if c in path or self.get_node(c).role == "Defender"]
+            
+            for child_label in children_labels:
+                child_node = self.get_node(child_label)
                 
-                # Add only children that are in the path to the target OR are Defender nodes
-                children = [c for c in self.get_children(parent_node) if c in path or self.get_node(c).role == "Defender"]
-                for child_label in children:
+                # BUG FIX 1: Always preserve the structural edge connecting parent to child,
+                # even if the child node was already pre-added by a Defender/parallel subtree.
+                edge_to_add = ((parent_node.label, child_node.label), child_node.action)
+                if edge_to_add not in pruned_tree.edges:
+                    pruned_tree.edges.append(edge_to_add)
+                
+                # Handle the child node insertion logic
+                if child_label in path:
+                    # If the child is on the main path, just guarantee its presence.
+                    # It will be evaluated as a parent in the next iterations of the loop.
                     if child_label not in added_nodes:
-                        child_node = self.get_node(child_label)
-                        
-                        if child_node.role == "Defender":
-                            # Fix: Preserve the entire subtree for Defender nodes to keep their preconditions
-                            subtree = self.get_subtree(child_label)
-                            for node in subtree.nodes:
-                                if node.label not in added_nodes:
-                                    pruned_tree.add_node(node)
-                                    added_nodes.add(node.label)
-                            for edge in subtree.edges:
-                                pruned_tree.edges.append(edge)
-                            pruned_tree.add_edge(parent_node, child_node)
-                        else:
-                            pruned_tree.add_node(child_node)
-                            added_nodes.add(child_label)
-                            pruned_tree.add_edge(parent_node, child_node)
+                        pruned_tree.add_node(child_node)
+                        added_nodes.add(child_label)
+                elif child_node.role == "Defender" or parent_node.refinement == "conjunctive":
+                    # BUG FIX 2: Do not break the loop. For Defender nodes or parallel branches 
+                    # of a conjunctive node, pull their full subtrees to keep preconditions intact.
+                    subtree = self.get_subtree(child_label)
+                    for node in subtree.nodes:
+                        if node.label not in added_nodes:
+                            pruned_tree.add_node(node)
+                            added_nodes.add(node.label)
+                    for edge in subtree.edges:
+                        if edge not in pruned_tree.edges:
+                            pruned_tree.edges.append(edge)
         
-        return pruned_tree
-                
+        return pruned_tree            
             
             
     def get_path_to_node(self, label):
