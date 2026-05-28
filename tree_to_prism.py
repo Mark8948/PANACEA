@@ -351,4 +351,4 @@ def save_prism_properties(file, mode="cost"):
         f.write('<<attacker>>R{"attacker"}min=? [ F "terminate" ];\n\n')
 
         f.write('// Minimum expected value for the defender\n')
-        f.write('<<defender>>R{"defender"}min=? [ F "terminate" ];\n')
+        f.write('<<defender>>R{"defender"}min=? [ F "deadlock" ];\n')
