@@ -106,6 +106,9 @@ def get_info(df):
     return goal, actions_to_goal, initial_attributes, attacker_actions, defender_actions, df_attacker, df_defender
 
 def get_prism_model(tree):
+    """
+    Converts a tree object into a PRISM model.
+    """
     df = tree.to_dataframe()
     goal, actions_to_goal, initial_attributes, attacker_actions, defender_actions, df_attacker, df_defender = get_info(df)
     
@@ -115,50 +118,25 @@ def get_prism_model(tree):
         text += ", " + ", ".join(att_actions)
     text += "\nendplayer\n"
 
+    # FIX: Aggiunto [passD]
     text += "player defender\n\tdefender, [passD]"
     def_actions = [f"[{a}]" for a in defender_actions.keys()]
     if def_actions:
         text += ", " + ", ".join(def_actions)
     text += "\nendplayer\n\nglobal sched : [1..2];\n\n"
 
-    # --- INIZIO FIX: DICHIARAZIONE DINAMICA E SICURA DELLE VARIABILI GLOBALI ---
     text += f'global {goal} : [0..1];\nlabel "terminate" = {goal}=1;\n\n'
 
-    defender_attributes = set(df_defender.loc[df_defender["Type"] == "Attribute"]["Label"].values)
-    attacker_attributes = set(df_attacker.loc[df_attacker["Type"] == "Attribute"]["Label"].values)
-    
-    declared_vars = {goal}
-    
-    for a in attacker_attributes:
-        if a not in declared_vars:
-            text += f"global {a} : [0..2];\n"
-            declared_vars.add(a)
-            
-    for a in set(initial_attributes):
-        if a not in declared_vars:
-            text += f"global {a} : [1..2];\n"
-            declared_vars.add(a)
-            
-    # Raccogliamo TUTTI gli effetti e precondizioni usati nelle azioni
-    all_implicit_vars = set()
-    for act in attacker_actions.values():
-        all_implicit_vars.add(act["effect"])
-        all_implicit_vars.update(act["preconditions"])
-    for act in defender_actions.values():
-        all_implicit_vars.add(act["effect"])
-        all_implicit_vars.update(act["preconditions"])
+    for a in set(df_attacker.loc[df_attacker["Type"] == "Attribute"]["Label"].values):
+        text += "global " + a + " : [0..2];\n"
         
-    # Dichiariamo quelli mancanti (evitando le variabili locali del difensore)
-    for var in all_implicit_vars:
-        if var not in declared_vars and var not in defender_attributes:
-            text += f"global {var} : [0..2];\n"
-            declared_vars.add(var)
-    # --- FINE FIX ---
+    for a in set(initial_attributes):
+        text += "global " + a + " : [1..2];\n"
 
     text += "\nmodule attacker\n\n"
     
     for a in attacker_actions.keys():
-        text += f"\tprogress_{a} : bool;\n"
+        text += f"\t{a} : bool;\n"
         
     text += "\n"
 
@@ -178,10 +156,11 @@ def get_prism_model(tree):
                 precon += f"{p}=1 {refinement} "
             precon = f"{precon[:-3]})"
             
-        text += f"\t[{a}] sched=1 & {goal}!=1 & {effect}=0 & !progress_{a}{precon} -> {effects} & (progress_{a}'=true) & (sched'=2);\n"
+        text += f"\t[{a}] sched=1 & !{goal}=1 & {effect}=0 & !{a}{precon} -> {effects} & ({a}'=true) & (sched'=2);\n"
         
     text += "\nendmodule\n\nmodule defender\n\n"
 
+    defender_attributes = set(df_defender.loc[df_defender["Type"] == "Attribute"]["Label"].values)
     for a in defender_attributes:
         text += f"\t{a} : [0..1];\n"
         
@@ -195,19 +174,25 @@ def get_prism_model(tree):
         else:
             refinement = "&"
             
-        precon = ""
-        if preconditions != []:
-            precon += " & ("
-            for p in set(preconditions):
-                precon += f"{p}=1 {refinement} "
-            precon = f"{precon[:-3]})"
-
         if effect in defender_attributes:
-            text += f"\t[{a}] sched=2 & {goal}!=1 & {effect}=0{precon} -> ({effect}'=1) & (sched'=1);\n"
+            text += f"\t[{a}] sched=2 & !{goal}=1 & {effect}=0"
+            if preconditions != []:
+                text += " & ("
+                for p in set(preconditions):
+                    text += f"{p}=1 {refinement} "
+                text = f"{text[:-3]})"
+            text += f" -> ({effect}'=1) & (sched'=1);\n"
         else:
-            text += f"\t[{a}] sched=2 & {goal}!=1 & {effect}!=2{precon} -> ({effect}'=2) & (sched'=1);\n"
+            text += f"\t[{a}] sched=2 & !{goal}=1 & !{effect}=2"
+            if preconditions != []:
+                text += " & ("
+                for p in set(preconditions):
+                    text += f"{p}=1 {refinement} "
+                text = f"{text[:-3]})"
+            text += f" -> ({effect}'=2) & (sched'=1);\n"
             
-    text += "\n\t// Azione pass-turn per impedire blocchi dello scheduler (deadlock)\n"
+    # FIX: Azione per passare il turno
+    text += "\n\t// Azione per passare il turno se non ci sono difese attivabili\n"
     text += "\t[passD] sched=2 -> (sched'=1);\n"
         
     text += '\nendmodule\n\nrewards "attacker"\n\n'
@@ -227,21 +212,23 @@ def get_prism_model(tree):
     return text
 
 def get_prism_model_time(tree):
+    """
+    Converts a tree object into a PRISM model with time.
+    """
     df = tree.to_dataframe()
-    goal, actions_to_goal, initial_attributes, attacker_actions, defender_actions, df_attacker, df_defender = get_info(df)
+    goal, actions_to_goal, list_initial, attacker_actions, defender_actions, df_attacker, df_defender = get_info(df)
+    attacker_max_time = max(df_attacker["Time"].values)
+    defender_max_time = max(df_defender["Time"].values)
     
-    attacker_max_time = max(int(x) for x in df_attacker["Time"].values if str(x).isdigit()) if not df_attacker.empty else 1
-    defender_max_time = max(int(x) for x in df_defender["Time"].values if str(x).isdigit()) if not df_defender.empty else 1
-    
-    text = "smg\n\nplayer attacker\n\tattacker, [wait1], [passA]"
+    text = "smg\n\nplayer attacker\n\tattacker, [wait1]"
     att_actions = []
     for a in attacker_actions.keys():
-        att_actions.extend([f"[start{a}]", f"[end{a}]", f"[fail{a}]"])
+        att_actions.extend([f"[start{a}]", f"[end{a}]"])
     if att_actions:
         text += ", " + ", ".join(att_actions)
     text += "\nendplayer\n"
 
-    text += "player defender\n\tdefender, [wait2], [passD]"
+    text += "player defender\n\tdefender, [wait2]"
     def_actions = []
     for a in defender_actions.keys():
         def_actions.extend([f"[start{a}]", f"[end{a}]"])
@@ -249,47 +236,22 @@ def get_prism_model_time(tree):
         text += ", " + ", ".join(def_actions)
     text += "\nendplayer\n\nglobal sched : [1..2];\n\n"
 
-    # --- INIZIO FIX: DICHIARAZIONE DINAMICA E SICURA DELLE VARIABILI GLOBALI ---
     text += f'global {goal} : [0..1];\nlabel "terminate" = {goal}=1;\n\n'
 
-    defender_attributes = set(df_defender.loc[df_defender["Type"] == "Attribute"]["Label"].values)
-    attacker_attributes = set(df_attacker.loc[df_attacker["Type"] == "Attribute"]["Label"].values)
-    
-    declared_vars = {goal}
-    
-    for a in attacker_attributes:
-        if a not in declared_vars:
-            text += f"global {a} : [0..2];\n"
-            declared_vars.add(a)
-            
-    for a in set(initial_attributes):
-        if a not in declared_vars:
-            text += f"global {a} : [1..2];\n"
-            declared_vars.add(a)
-            
-    all_implicit_vars = set()
-    for act in attacker_actions.values():
-        all_implicit_vars.add(act["effect"])
-        all_implicit_vars.update(act["preconditions"])
-    for act in defender_actions.values():
-        all_implicit_vars.add(act["effect"])
-        all_implicit_vars.update(act["preconditions"])
+    for a in set(df_attacker.loc[df_attacker["Type"] == "Attribute"]["Label"].values):
+        text += "global " + a + " : [0..2];\n"
         
-    for var in all_implicit_vars:
-        if var not in declared_vars and var not in defender_attributes:
-            text += f"global {var} : [0..2];\n"
-            declared_vars.add(var)
-    # --- FINE FIX ---
+    for a in set(list_initial):
+        text += "global " + a + " : [1..2];\n"
 
     text += "\nmodule attacker\n\n"
 
-    for a in attacker_actions.keys():
-        text += f"\tprogress_{a} : bool;\n"
+    for a in set(df_attacker["Action"].values):
+        text += f"\tprogress{a} : bool;\n"
         
     text += "\n"
     text += f"\ttime1 : [-1..{attacker_max_time}];\n"
     text += f"\t[wait1] sched=1 & time1>0 -> (sched'=2) & (time1'=time1-1);\n"
-    text += "\t[passA] sched=1 & time1<0 -> (sched'=2);\n"
 
     for a in attacker_actions.keys():
         preconditions = attacker_actions[a]["preconditions"]
@@ -311,26 +273,26 @@ def get_prism_model_time(tree):
             fail += " | "
             for p in set(preconditions):
                 precon += f"{p}=1 {refinement} "
-                fail += f"{p}!=1 {fail_refinement} " 
+                fail += f"!{p}=1 {fail_refinement} "
             precon = f"{precon[:-3]})"
             fail = f"{fail[:-3]}"
             
-        text += f"\n\t[start{a}] sched=1 & time1<0 & !progress_{a} & {goal}!=1 & {effect}=0{precon} -> (sched'=2) & (time1'={time}) & (progress_{a}'=true);\n"
-        text += f"\t[end{a}] sched=1 & time1=0 & progress_{a} & {goal}!=1 & {effect}=0{precon} -> (time1'=time1-1) & (progress_{a}'=false) & {effects};\n"
-        text += f"\t[fail{a}] sched=1 & time1=0 & progress_{a} & {goal}!=1 & ({effect}!=0 {fail}) -> (time1'=time1-1) & (progress_{a}'=false);\n"
+        text += f"\n\t[start{a}] sched=1 & time1<0 & !progress{a} & !{goal}=1 & {effect}=0{precon} -> (sched'=2) & (time1'={time}) & (progress{a}'=true);\n"
+        text += f"\t[end{a}] sched=1 & time1=0 & progress{a} & !{goal}=1 & {effect}=0{precon} -> (time1'=time1-1) & (progress{a}'=false) & {effects};\n"
+        text += f"\t[fail{a}] sched=1 & time1=0 & progress{a} & !{goal}=1 & (!{effect}=0 {fail}) -> (time1'=time1-1) & (progress{a}'=false);\n"
         
     text += "\nendmodule\n\nmodule defender\n\n"
 
+    defender_attributes = set(df_defender.loc[df_defender["Type"] == "Attribute"]["Label"].values)
     for a in defender_attributes:
         text += f"\t{a} : [0..1];\n"
     
     text += "\n"
-    for a in defender_actions.keys():
-        text += f"\tprogress_{a} : bool;\n"
+    for a in set(df_defender["Action"].values):
+        text += f"\tprogress{a} : bool;\n"
         
     text += f"\n\ttime2 : [-1..{defender_max_time}];\n"
     text += f"\t[wait2] sched=2 & time2>0 -> (sched'=1) & (time2'=time2-1);\n"
-    text += "\t[passD] sched=2 & time2<0 -> (sched'=1);\n"
         
     for a in defender_actions.keys():
         preconditions = defender_actions[a]["preconditions"]
@@ -342,27 +304,34 @@ def get_prism_model_time(tree):
         else:
             refinement = "&"
             
-        precon = ""
-        if preconditions != []:
-            precon += " & ("
-            for p in set(preconditions):
-                precon += f"{p}=1 {refinement} "
-            precon = f"{precon[:-3]})"
-
         if effect in defender_attributes:
-            text += f"\n\t[start{a}] sched=2 & time2<0 & !progress_{a} & {goal}!=1 & {effect}=0{precon} -> (sched'=1) & (time2'={time}) & (progress_{a}'=true);\n"
-            text += f"\t[end{a}] sched=2 & time2=0 & progress_{a} & {goal}!=1 & {effect}=0{precon} -> (time2'=time2-1) & (progress_{a}'=false) & ({effect}'=1);\n"
+            precon = ""
+            if preconditions != []:
+                precon += " & ("
+                for p in set(preconditions):
+                    precon += f"{p}=1 {refinement} "
+                precon = f"{precon[:-3]})"
+            text += f"\n\t[start{a}] sched=2 & time2<0 & !progress{a} & !{goal}=1 & {effect}=0{precon} -> (sched'=1) & (time2'={time}) & (progress{a}'=true);\n"
+            text += f"\t[end{a}] sched=2 & time2=0 & progress{a} & !{goal}=1 & {effect}=0{precon} -> (time2'=time2-1) & (progress{a}'=false) & ({effect}'=1);\n"
         else:
-            text += f"\n\t[start{a}] sched=2 & time2<0 & !progress_{a} & {goal}!=1 & {effect}!=2{precon} -> (sched'=1) & (time2'={time}) & (progress_{a}'=true);\n"
-            text += f"\t[end{a}] sched=2 & time2=0 & progress_{a} & {goal}!=1 & {effect}!=2{precon} -> (time2'=time2-1) & (progress_{a}'=false) & ({effect}'=2);\n"
+            precon = ""
+            if preconditions != []:
+                precon += " & ("
+                for p in set(preconditions):
+                    precon += f"{p}=1 {refinement} "
+                precon = f"{precon[:-3]})"
+            text += f"\n\t[start{a}] sched=2 & time2<0 & !progress{a} & !{goal}=1 & !{effect}=2{precon} -> (sched'=1) & (time2'={time}) & (progress{a}'=true);\n"
+            text += f"\t[end{a}] sched=2 & time2=0 & progress{a} & !{goal}=1 & !{effect}=2{precon} -> (time2'=time2-1) & (progress{a}'=false) & ({effect}'=2);\n"
         
     text += '\nendmodule\n\nrewards "attacker"\n\n'
 
+    # FIX: Sostituito 'cost' con 'time'
     for a in attacker_actions.keys():
         text += f"\t[start{a}] true : {attacker_actions[a]['time']};\n"
         
     text += '\nendrewards\n\nrewards "defender"\n\n'
 
+    # FIX: Sostituito 'cost' con 'time'
     for a in actions_to_goal:
         text += f"\t[end{a}] true : {int(attacker_actions[a]['time'])*10};\n"
     for a in defender_actions.keys():
