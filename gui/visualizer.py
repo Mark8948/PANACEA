@@ -193,13 +193,11 @@ class TreeVisualizer:
             x_lo, x_hi = min(xs) - 0.4, max(xs) + 0.4
             y_lo, y_hi = min(ys) - 0.4, max(ys) + 0.4
 
-        # ─── OTTIMIZZAZIONE DELLA GRIGLIA (VECTORIZED) ────────────────────────
+        # ─── GRID OPTIMIZING (VECTORIZED) ────────────────────────
         gx = np.arange(round(x_lo, 1), x_hi + 0.05, 0.1)
         gy = np.arange(round(y_lo, 1), y_hi + 0.05, 0.1)
         grid_color = _get_color("grid")
         
-        # Invece di un ciclo for, creiamo una matrice di punti e passiamo tutto
-        # a Matplotlib in una sola passata. Questo genera 1 solo oggetto invece di migliaia!
         X, Y = np.meshgrid(gx, gy)
         ax.plot(X.flatten(), Y.flatten(), marker=".", linestyle="none", color=grid_color, markersize=1, zorder=0, alpha=0.35)
         # ──────────────────────────────────────────────────────────────────────
@@ -227,7 +225,7 @@ class TreeVisualizer:
                     connectionstyle="arc3,rad=0.08",
                 ),
                 zorder=1,
-                annotation_clip=False, # FORZA LA VISUALIZZAZIONE ANCHE FUORI SCHERMO
+                annotation_clip=False,
             )
 
             action = data.get("action", "")
@@ -246,7 +244,7 @@ class TreeVisualizer:
                         edgecolor="none",
                         alpha=0.78,
                     ),
-                    clip_on=False, # FORZA LA VISUALIZZAZIONE ANCHE FUORI SCHERMO
+                    clip_on=False, 
                 )
             
             self._drawn_edges[(u, v)] = {'arrow': ann, 'text': txt}
@@ -259,7 +257,6 @@ class TreeVisualizer:
             border_c = _get_color("defender_border") if is_def else _get_color("attacker_border")
             glow_c = _get_color("defender_glow") if is_def else _get_color("attacker_glow")
 
-            # Aggiunto clip_on=False a tutti i componenti del nodo
             glow1 = mpatches.Circle((x, y), r + 0.022, color=glow_c, alpha=0.14, zorder=2, clip_on=False)
             glow2 = mpatches.Circle((x, y), r + 0.010, color=glow_c, alpha=0.28, zorder=2, clip_on=False)
             fill = mpatches.Circle((x, y), r, color=fill_c, zorder=3, clip_on=False)
@@ -277,7 +274,7 @@ class TreeVisualizer:
                 color=_get_color("node_text"),
                 ha="center", va="center", zorder=5,
                 multialignment="center",
-                clip_on=False, # FORZA LA VISUALIZZAZIONE ANCHE FUORI SCHERMO
+                clip_on=False, 
             )
 
             self._drawn_nodes[label] = {
