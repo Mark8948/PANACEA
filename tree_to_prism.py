@@ -207,7 +207,8 @@ def get_prism_model(tree):
 
     return text
 
-def get_prism_model_time(tree):
+# FIX: Aggiunto parametro dinamico reward_type
+def get_prism_model_time(tree, reward_type="time"):
     """
     Converts a tree object into a PRISM model with time.
     """
@@ -326,17 +327,17 @@ def get_prism_model_time(tree):
         
     text += '\nendmodule\n\nrewards "attacker"\n\n'
 
-    # FIX: Sostituito 'cost' con 'time'
+    # FIX: Utilizzo di reward_type dinamico
     for a in attacker_actions.keys():
-        text += f"\t[start{a}] true : {attacker_actions[a]['time']};\n"
+        text += f"\t[start{a}] true : {attacker_actions[a][reward_type]};\n"
         
     text += '\nendrewards\n\nrewards "defender"\n\n'
 
-    # FIX: Sostituito 'cost' con 'time'
+    # FIX: Utilizzo di reward_type dinamico
     for a in actions_to_goal:
-        text += f"\t[end{a}] true : {int(attacker_actions[a]['time'])*10};\n"
+        text += f"\t[end{a}] true : {int(attacker_actions[a][reward_type])*10};\n"
     for a in defender_actions.keys():
-        text += f"\t[start{a}] true : {defender_actions[a]['time']};\n"
+        text += f"\t[start{a}] true : {defender_actions[a][reward_type]};\n"
           
     text += "\nendrewards"
 

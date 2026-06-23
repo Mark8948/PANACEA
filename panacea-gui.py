@@ -249,7 +249,6 @@ class PanaceaApp(ctk.CTk):
         self.stats_canvas.get_tk_widget().pack(fill="both", expand=True, padx=10, pady=10)
         self._update_stats_plot()
 
-
     # --- CORE ANALYSIS LOGIC ---
 
     def run_stats_analysis(self):
@@ -266,29 +265,35 @@ class PanaceaApp(ctk.CTk):
         temp_dir = tempfile.gettempdir()
 
         try:
+            # SPOSTIAMO LA LETTURA DELLA CHECKBOX IN CIMA
+            use_time = self.time_analysis.get() == 1
+
             # 1. RUN COST ANALYSIS
             self.write_to_console("[STATS] Step 1/2: Calculating Attacker & Defender Cost...")
-            prism_model_cost = tp.get_prism_model(tree_to_run)
+            
+            # IL FIX E' QUI: Valutiamo i costi sul modello temporizzato passando reward_type="cost"
+            if use_time:
+                prism_model_cost = tp.get_prism_model_time(tree_to_run, reward_type="cost")
+            else:
+                prism_model_cost = tp.get_prism_model(tree_to_run)
+                
             path_cost = os.path.join(temp_dir, "panacea_cost.prism")
             tp.save_prism_model(prism_model_cost, path_cost)
 
             props_cost = os.path.join(temp_dir, "panacea_cost.props")
-            # PASSAGGIO DEL MODE "cost"
             tp.save_prism_properties(props_cost, mode="cost")
 
             res_costs = self._execute_prism_multi(path_cost, props_cost, silent=True)
 
             # 2. RUN TIME ANALYSIS
-            use_time = self.time_analysis.get() == 1
-            
             if use_time:
                 self.write_to_console("[STATS] Step 2/2: Calculating Attacker & Defender Time...")
+                # Di default get_prism_model_time usa reward_type="time"
                 prism_model_time = tp.get_prism_model_time(tree_to_run)
                 path_time = os.path.join(temp_dir, "panacea_time.prism")
                 tp.save_prism_model(prism_model_time, path_time)
 
                 props_time = os.path.join(temp_dir, "panacea_time.props")
-                # PASSAGGIO DEL MODE "time"
                 tp.save_prism_properties(props_time, mode="time")
 
                 res_times = self._execute_prism_multi(path_time, props_time, silent=True)
