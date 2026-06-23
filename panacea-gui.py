@@ -7,6 +7,7 @@ import re
 import tempfile
 import platform
 import shutil
+import math
 from PIL import Image, ImageDraw
 from typing import Optional, List, Tuple
 
@@ -278,16 +279,23 @@ class PanaceaApp(ctk.CTk):
             res_costs = self._execute_prism_multi(path_cost, props_cost, silent=True)
 
             # 2. RUN TIME ANALYSIS
-            self.write_to_console("[STATS] Step 2/2: Calculating Attacker & Defender Time...")
-            prism_model_time = tp.get_prism_model_time(tree_to_run)
-            path_time = os.path.join(temp_dir, "panacea_time.prism")
-            tp.save_prism_model(prism_model_time, path_time)
+            use_time = self.time_analysis.get() == 1
+            
+            if use_time:
+                self.write_to_console("[STATS] Step 2/2: Calculating Attacker & Defender Time...")
+                prism_model_time = tp.get_prism_model_time(tree_to_run)
+                path_time = os.path.join(temp_dir, "panacea_time.prism")
+                tp.save_prism_model(prism_model_time, path_time)
 
-            props_time = os.path.join(temp_dir, "panacea_time.props")
-            # PASSAGGIO DEL MODE "time"
-            tp.save_prism_properties(props_time, mode="time")
+                props_time = os.path.join(temp_dir, "panacea_time.props")
+                # PASSAGGIO DEL MODE "time"
+                tp.save_prism_properties(props_time, mode="time")
 
-            res_times = self._execute_prism_multi(path_time, props_time, silent=True)
+                res_times = self._execute_prism_multi(path_time, props_time, silent=True)
+            else:
+                self.write_to_console("[STATS] Step 2/2: Time analysis skipped.")
+                # Usiamo NaN invece di 0.0 per interrompere correttamente il grafico
+                res_times = (float('nan'), float('nan'))
 
             if res_costs is not None and res_times is not None:
                 att_cost, def_cost = res_costs
@@ -306,7 +314,7 @@ class PanaceaApp(ctk.CTk):
 
                 self._update_stats_plot()
 
-                def fmt(v): return "INF" if v == float('inf') else f"{v:.2f}"
+                def fmt(v): return "INF" if v == float('inf') else ("NaN" if math.isnan(v) else f"{v:.2f}")
                 self.write_to_console(
                     f"[SUCCESS] Att.Cost: {fmt(att_cost)} | Def.Cost: {fmt(def_cost)} | "
                     f"Att.Time: {fmt(att_time)} | Def.Time: {fmt(def_time)}"
@@ -347,7 +355,8 @@ class PanaceaApp(ctk.CTk):
             x = list(range(len(labels)))
 
             def _cap(values):
-                finite = [v for v in values if v != float('inf')]
+                # Ignora gli 'inf' e i NaN per il calcolo del tetto massimo
+                finite = [v for v in values if v != float('inf') and not math.isnan(v)]
                 return max(finite) * 1.3 if finite else 100.0
 
             att_cost_cap = _cap(att_costs)
@@ -356,7 +365,8 @@ class PanaceaApp(ctk.CTk):
             def_time_cap = _cap(def_times)
 
             def _plot_vals(values, cap):
-                return [v if v != float('inf') else cap for v in values]
+                # Preserva i NaN in modo che Matplotlib interrompa la linea
+                return [v if (v != float('inf') and not math.isnan(v)) else cap if v == float('inf') else float('nan') for v in values]
 
             plot_att_costs = _plot_vals(att_costs, att_cost_cap)
             plot_def_costs = _plot_vals(def_costs, def_cost_cap)
@@ -366,12 +376,21 @@ class PanaceaApp(ctk.CTk):
             color_att = self.palette["chart_cost"]
             color_def = self.palette.get("chart_time", "#4fc3f7")
 
+            # Aggiungiamo sempre i panel dei costi
             panels = [
                 (self.stats_ax_att_cost, plot_att_costs, att_costs, att_cost_cap, color_att, "Attacker Cost",  "o"),
                 (self.stats_ax_def_cost, plot_def_costs, def_costs, def_cost_cap, color_def, "Defender Cost",  "s"),
-                (self.stats_ax_att_time, plot_att_times, att_times, att_time_cap, color_att, "Attacker Time",  "o"),
-                (self.stats_ax_def_time, plot_def_times, def_times, def_time_cap, color_def, "Defender Time",  "s"),
             ]
+
+            # Controlliamo se esiste almeno un valore temporale valido plottabile
+            if any(t > 0 and not math.isnan(t) for t in att_times) or any(t > 0 and not math.isnan(t) for t in def_times):
+                panels.extend([
+                    (self.stats_ax_att_time, plot_att_times, att_times, att_time_cap, color_att, "Attacker Time",  "o"),
+                    (self.stats_ax_def_time, plot_def_times, def_times, def_time_cap, color_def, "Defender Time",  "s"),
+                ])
+            else:
+                self.stats_ax_att_time.text(0.5, 0.5, "Time Analysis Disabled\n(Check Export Options)", ha='center', va='center', color=self.palette["muted"], fontsize=10)
+                self.stats_ax_def_time.text(0.5, 0.5, "Time Analysis Disabled\n(Check Export Options)", ha='center', va='center', color=self.palette["muted"], fontsize=10)
 
             for ax, plot_vals, raw_vals, cap, color, title, marker in panels:
                 ax.plot(x, plot_vals, marker=marker, linewidth=2.5, color=color)
@@ -384,12 +403,16 @@ class PanaceaApp(ctk.CTk):
                 ax.spines['right'].set_visible(False)
 
                 for i in range(len(x)):
+                    # Salta le annotazioni testuali se il valore è NaN
+                    if math.isnan(raw_vals[i]):
+                        continue
+                        
                     lbl = "INF" if raw_vals[i] == float('inf') else f"{raw_vals[i]:.1f}"
                     ax.annotate(lbl, (x[i], plot_vals[i]), xytext=(0, 8),
                                 textcoords="offset points", color=color,
                                 weight='bold', ha='center', fontsize=8)
 
-                finite_vals = [v for v in raw_vals if v != float('inf')]
+                finite_vals = [v for v in raw_vals if v != float('inf') and not math.isnan(v)]
                 if finite_vals:
                     v_min, v_max = min(finite_vals), max(finite_vals)
                     if float('inf') in raw_vals:
@@ -404,7 +427,6 @@ class PanaceaApp(ctk.CTk):
                 if len(x) == 1:
                     ax.set_xlim(-0.5, 0.5)
 
-            # X tick labels solo sui subplot inferiori
             self.stats_ax_att_cost.set_xticklabels([])
             self.stats_ax_def_cost.set_xticklabels([])
             self.stats_ax_att_time.set_xticklabels(labels, fontsize=8, color=self.palette["text"])
