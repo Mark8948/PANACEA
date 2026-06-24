@@ -67,9 +67,6 @@ def get_info(df):
         parent_label = row["Parent"]
         parent_type = df.loc[df["Label"] == parent_label]["Type"].values[0]
         
-        # FIX LOGICO 1: Gestione dell'annidamento Azione->Azione. 
-        # Se il genitore è un'Azione, l'effetto dell'azione corrente è soddisfare se stessa,
-        # in modo che il genitore possa vederla completata.
         if parent_type in ["Attribute", "Goal"]:
             effect = parent_label
         else:
@@ -77,7 +74,7 @@ def get_info(df):
             
         cost = row["Cost"]
         
-        # FIX LOGICO 2: Usiamo la regola logica (AND/OR) del nodo stesso, non del genitore!
+       
         refinement = row["Refinement"] 
         
         time = row["Time"]
@@ -191,7 +188,6 @@ def get_prism_model(tree):
                 text = f"{text[:-3]})"
             text += f" -> ({effect}'=2) & (sched'=1);\n"
             
-    # FIX: Azione per passare il turno
     text += "\n\t// Azione per passare il turno se non ci sono difese attivabili\n"
     text += "\t[passD] sched=2 -> (sched'=1);\n"
         
@@ -211,7 +207,8 @@ def get_prism_model(tree):
 
     return text
 
-def get_prism_model_time(tree):
+# FIX: Aggiunto parametro dinamico reward_type
+def get_prism_model_time(tree, reward_type="time"):
     """
     Converts a tree object into a PRISM model with time.
     """
@@ -223,12 +220,14 @@ def get_prism_model_time(tree):
     text = "smg\n\nplayer attacker\n\tattacker, [wait1]"
     att_actions = []
     for a in attacker_actions.keys():
-        att_actions.extend([f"[start{a}]", f"[end{a}]"])
+        # FIX: Aggiunta esplicita dell'azione di fallimento al giocatore
+        att_actions.extend([f"[start{a}]", f"[end{a}]", f"[fail{a}]"])
     if att_actions:
         text += ", " + ", ".join(att_actions)
     text += "\nendplayer\n"
 
-    text += "player defender\n\tdefender, [wait2]"
+    # FIX: Aggiunto [passD] al giocatore difensore nel modello temporizzato
+    text += "player defender\n\tdefender, [wait2], [passD]"
     def_actions = []
     for a in defender_actions.keys():
         def_actions.extend([f"[start{a}]", f"[end{a}]"])
@@ -322,20 +321,23 @@ def get_prism_model_time(tree):
                 precon = f"{precon[:-3]})"
             text += f"\n\t[start{a}] sched=2 & time2<0 & !progress{a} & !{goal}=1 & !{effect}=2{precon} -> (sched'=1) & (time2'={time}) & (progress{a}'=true);\n"
             text += f"\t[end{a}] sched=2 & time2=0 & progress{a} & !{goal}=1 & !{effect}=2{precon} -> (time2'=time2-1) & (progress{a}'=false) & ({effect}'=2);\n"
+
+    text += "\n\t// Azione per passare il turno se non ci sono difese attivabili\n"
+    text += "\t[passD] sched=2 & time2<0 -> (sched'=1);\n"
         
     text += '\nendmodule\n\nrewards "attacker"\n\n'
 
-    # FIX: Sostituito 'cost' con 'time'
+    # FIX: Utilizzo di reward_type dinamico
     for a in attacker_actions.keys():
-        text += f"\t[start{a}] true : {attacker_actions[a]['time']};\n"
+        text += f"\t[start{a}] true : {attacker_actions[a][reward_type]};\n"
         
     text += '\nendrewards\n\nrewards "defender"\n\n'
 
-    # FIX: Sostituito 'cost' con 'time'
+    # FIX: Utilizzo di reward_type dinamico
     for a in actions_to_goal:
-        text += f"\t[end{a}] true : {int(attacker_actions[a]['time'])*10};\n"
+        text += f"\t[end{a}] true : {int(attacker_actions[a][reward_type])*10};\n"
     for a in defender_actions.keys():
-        text += f"\t[start{a}] true : {defender_actions[a]['time']};\n"
+        text += f"\t[start{a}] true : {defender_actions[a][reward_type]};\n"
           
     text += "\nendrewards"
 
