@@ -130,7 +130,7 @@ class PanaceaApp(ctk.CTk):
         time_card = ctk.CTkFrame(self.sidebar, fg_color=self.palette["card"], corner_radius=self.ui_radius, border_width=1, border_color=self.palette["border"])
         time_card.pack(fill="x", padx=22, pady=(0, 18))
         ctk.CTkLabel(time_card, text="Export Options", image=self.icons["clock"], compound="left", font=ctk.CTkFont(size=15, weight="bold"), text_color=self.palette["text"]).pack(anchor="w", padx=16, pady=(16, 6))
-        ctk.CTkLabel(time_card, text="Enable the time variant generation for PRISM export (Home tab).", wraplength=250, justify="left", text_color=self.palette["muted"], font=ctk.CTkFont(size=13)).pack(anchor="w", padx=16, pady=(0, 10))
+        ctk.CTkLabel(time_card, text="Enable the time variant generation for PRISM (both for export and plotting).", wraplength=250, justify="left", text_color=self.palette["muted"], font=ctk.CTkFont(size=13)).pack(anchor="w", padx=16, pady=(0, 10))
         
         self.time_analysis = ctk.CTkCheckBox(
             time_card, 
@@ -723,16 +723,15 @@ class PanaceaApp(ctk.CTk):
         ctk.CTkButton(edit_win, text="Save Changes", fg_color=self.palette["success"], hover_color=self.palette["success_hover"], font=ctk.CTkFont(size=15, weight="bold"), command=save_changes).pack(pady=(30, 10))
 
     def _on_time_toggle(self):
-        """Si attiva quando l'utente clicca sulla checkbox del tempo."""
-        
+        """Activates when the user clicks the time checkbox."""
+
         if self.current_tree:
             status = "Enabled" if self.time_analysis.get() == 1 else "Disabled"
             self.write_to_console(f"[CONFIG] Time Analysis {status}.")
             
-            # Aggiungiamo un'etichetta per la Run successiva
             self.pending_modifications.append(f"Time {status}")
             
-            # Impostiamo lo stato "sporco" per sbloccare il tasto
+            
             self.tree_modified = True
             self._update_stats_button_state()
     
