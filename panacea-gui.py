@@ -432,9 +432,16 @@ class PanaceaApp(ctk.CTk):
                 if len(x) == 1:
                     ax.set_xlim(-0.5, 0.5)
 
+            self.stats_ax_att_cost.set_xticks(x)
             self.stats_ax_att_cost.set_xticklabels([])
+            
+            self.stats_ax_def_cost.set_xticks(x)
             self.stats_ax_def_cost.set_xticklabels([])
+            
+            self.stats_ax_att_time.set_xticks(x)
             self.stats_ax_att_time.set_xticklabels(labels, fontsize=8, color=self.palette["text"])
+            
+            self.stats_ax_def_time.set_xticks(x)
             self.stats_ax_def_time.set_xticklabels(labels, fontsize=8, color=self.palette["text"])
 
             self.stats_fig.subplots_adjust(hspace=0.45, wspace=0.35, bottom=0.12, right=0.96, left=0.08, top=0.94)
